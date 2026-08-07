@@ -55,10 +55,12 @@ The station starts **UNNOTICED**: no dread, no events, nobody at the door, until
 **The dread**
 
 - A **dread meter** fills the whole time you're listening — faster the louder you are. It runs CALM → UNEASY → HAUNTED → CRITICAL → THRESHOLD, costing production from 50 up.
-- **GO DARK** kills the lights for 20 seconds: no production, no pings, but dread drains fast. It's the main tool for staying alive, so it is not free — below level 5 it costs nothing, and from there it costs **4% of your next level's threshold** (around 900 signal the first time it's charged), which keeps it a real decision without being a wall at the level a new operator first hits it. Two upgrades (Cheap Darkness, Standing Blackout) cut the price by 40% and then half again.
+- **GO DARK** kills the lights for 20 seconds: no production, no pings, but dread drains fast. It's the main tool for staying alive, so it always costs signal — **4% of your next level's threshold**, floored at 125 so it's never trivial even in the first minute, and scaling up fast from there (~135 at level 3, ~900 at level 5, ~2,400 at level 6). Two upgrades (Cheap Darkness, Standing Blackout) cut the price by 40% and then half again.
 - At high dread some carrier waves are **hollow** — touching one costs you badly.
+- **The Watcher** shows up somewhere on screen and gives you eight seconds to look back at it — click it for a payout and a little relief, ignore it and it costs you dread and a production dip. A second thing to keep an eye on besides the radar.
 - An unknown contact appears on the radar and closes on the centre as dread rises. When it arrives, **Contact** takes half your array and all your signal, and leaves a **scar** worth a permanent +5%.
 - The station gets visibly worse as it goes: vignette, static, flicker, a drone that rises with the dread, whispers in the log, and a couple of things that only show up past 50.
+- A live **Signal Trace** oscilloscope scrolls under the dish — amplitude tracks production, jitter tracks dread, the line shifts from calm teal toward dread red, and every ping sends a pulse through it.
 
 **Events, travellers and chests**
 
@@ -66,11 +68,15 @@ The station starts **UNNOTICED**: no dread, no events, nobody at the door, until
 - **Travellers** arrive every few minutes and knock. Twenty-three of them, each with two options that are deliberately balanced — both good, or both bad, so the pick is a genuine trade-off rather than an obvious right answer. Eight only come when the dread is already high. You have 25 seconds to answer. If you don't, something else does.
 - **Unmarked cases** wash up every 85–165 seconds once the station has been noticed. Opening one is a **coin flip**: ten ways it's salvage, ten ways it was bait. Three upgrades tilt the odds (+15% and +15%) and triple the payouts, but it never stops being a gamble.
 
+**The Store**
+
+A black-market tab of five temporary, repeatable buys — unlike upgrades these never run out and never get cheaper on their own, since cost scales off your *current* output rather than a fixed number. Each has its own cooldown so a single buy can't stack with itself: **Overclock** (production ×3, 90s), **Steady Hands** (ping yield ×4, 90s), **Vent The Pressure** (instantly −30 dread), **Push It** (production ×6 for 60s, but +20 dread), and **Bad Trade** (production ×10 for 45s, but it takes 10% of what's left when it's done).
+
 Click the dish or hold **Space**. Progress is saved in your browser's local storage; **WIPE SAVE** clears it.
 
 **DEV tab** (temporary, for testing)
 
-A purple **DEV** tab with toggles (infinite signal, no horror, infinite dark, no events, no travellers, god mode, free GO DARK, no chests) and buttons to grant signal from +1K up to +1Vg, jump to level 10/25/50 and print the current dark cost, jump dread, force Contact, spawn either kind of wave, spawn a chest forced to loot or to ruin, fire any specific traveller or any event by kind, and unlock everything. Every toggle defaults to off. It's fenced with `DEV PANEL START` / `DEV PANEL END` comments in five places (CSS, two markup blocks, the `DEV` object, and the JS block) so it can be stripped out cleanly on request.
+A purple **DEV** tab with toggles (infinite signal, no horror, infinite dark, no events, no travellers, god mode, free GO DARK, no chests, no watcher) and buttons to grant signal from +1K up to +1Vg, jump to level 10/25/50 and print the current dark cost, jump dread, force Contact, spawn either kind of wave, spawn a chest forced to loot or to ruin, spawn the Watcher, fire any specific traveller or any event by kind, and unlock everything. Every toggle defaults to off. It's fenced with `DEV PANEL START` / `DEV PANEL END` comments in four places (CSS, two markup blocks, and the JS block); the `DEV` state object itself sits nearby, unfenced but flagged with a comment, since leaving its all-`false` defaults in place is harmless even without the panel that toggles them.
 
 ---
 
@@ -79,4 +85,4 @@ A purple **DEV** tab with toggles (infinite signal, no horror, infinite dark, no
 Both games were tested headlessly with macOS's built-in JavaScriptCore (`jsc`):
 
 - **Tetris** — driving its real key handlers and reading the board back from its own draw calls.
-- **Void Signal** — running its real economy through a 40-day simulated playthrough, plus a horror suite that executes every event branch, all 46 traveller options and all 20 chest outcomes against both empty and wealthy stations, asserting no NaN, negative or out-of-range state comes out of any of them, and checking that level thresholds and the GO DARK price stay consistent from level 1 to 120.
+- **Void Signal** — running its real economy through a 40-day simulated playthrough, plus a horror suite that executes every event branch, all 46 traveller options, all 20 chest outcomes, and the Watcher's click-resolution *and* ignored-timeout paths, against both empty and wealthy stations, asserting no NaN, negative or out-of-range state comes out of any of them, and checking that level thresholds and the GO DARK price stay consistent from level 1 to 120. The Store's purchase/cooldown logic is checked separately, and a DOM-aware pass confirms the upgrades and store lists update their existing rows in place on repaint rather than rebuilding the list from scratch (the fix for a hover-flicker bug).

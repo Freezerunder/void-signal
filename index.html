@@ -97,6 +97,11 @@
 
   .stat-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
 
+  /* ---------------------------------------------------------------- scope */
+
+  .scope-card { margin-top: 12px; }
+  .scope-card canvas { width: 100%; height: 54px; display: block; margin-top: 8px; border-radius: 6px; background: #090b10; }
+
   /* ----------------------------------------------------------------- dread */
 
   .dread-card { margin-top: 12px; }
@@ -289,6 +294,22 @@
     75%      { transform: translate(-3px, 2px) rotate(-4deg); }
   }
 
+  /* --------------------------------------------------------------- watcher */
+
+  #watcher {
+    position: fixed; z-index: 50; width: 64px; height: 64px; border-radius: 50%;
+    display: none; place-items: center; cursor: pointer; font-size: 28px;
+    background: radial-gradient(circle at 40% 35%, #3a1518, #150607 65%, #050202);
+    border: 1px solid #5a2020;
+    box-shadow: 0 0 30px rgba(194,69,63,.6);
+    animation: watcherpulse 1.1s ease-in-out infinite;
+  }
+  #watcher.on { display: grid; }
+  @keyframes watcherpulse {
+    0%, 100% { transform: scale(1); opacity: .85; }
+    50%      { transform: scale(1.18); opacity: 1; }
+  }
+
   /* ---------------------------------------------------------------- modal */
 
   .modal {
@@ -363,13 +384,18 @@
         <div class="chips" id="chips"></div>
       </div>
 
+      <div class="card scope-card">
+        <div class="label">Signal Trace</div>
+        <canvas id="scope" width="250" height="54"></canvas>
+      </div>
+
       <div class="card dread-card">
         <div class="dread-top">
           <div class="label">Station Rating</div>
           <div class="dread-state mono" id="levelstate">LV <span id="levelnum">1</span></div>
         </div>
         <div class="meter lvl"><i id="levelbar"></i></div>
-        <div class="dread-note" id="levelnote">Blackouts are free until level 5.</div>
+        <div class="dread-note" id="levelnote">Next level at 500 total.</div>
 
         <div class="dread-top" style="margin-top:14px">
           <div class="label">Dread</div>
@@ -399,6 +425,7 @@
       <div class="tabs" id="tabs">
         <button class="tab on" data-tab="array">ARRAY</button>
         <button class="tab" data-tab="upgrades">UPGRADES<span class="badge" id="upbadge">0</span></button>
+        <button class="tab" data-tab="store">STORE</button>
         <button class="tab" data-tab="logs">LOGS</button>
         <button class="tab" data-tab="transmit">TRANSMIT</button>
         <button class="tab" data-tab="stats">STATS</button>
@@ -424,6 +451,11 @@
         <div id="tab-upgrades" hidden>
           <div class="bar"><div class="label">Available Upgrades</div></div>
           <div id="uplist"></div>
+        </div>
+
+        <div id="tab-store" hidden>
+          <div class="bar"><div class="label">Black Market · temporary, no receipts</div></div>
+          <div id="storelist"></div>
         </div>
 
         <div id="tab-logs" hidden>
@@ -471,6 +503,7 @@
 <div id="fx"></div>
 <div id="wave" title="Carrier wave">📡</div>
 <div id="chest" title="Unmarked case">📦</div>
+<div id="watcher" title="Something is watching">👁️</div>
 
 <div class="modal" id="modal">
   <div class="box" id="modalbox">
@@ -811,6 +844,65 @@
     { id: 'c6',  name: 'Well Stocked',     d: 'Open 250 chests',           c: function (S) { return S.chests >= 250; } }
   ];
 
+  // ---------------------------------------------------------------- store
+  // Temporary, repeatable buys — unlike UPGRADES these never run out and
+  // never get cheaper. Cost is scaled off your own current output rather
+  // than a fixed number, so an item is never trivial and never a wall no
+  // matter how far into the run you are. A cooldown per item (tracked
+  // outside S, wall-clock like darkCooldown) stops a single buy from
+  // stacking with itself.
+
+  const STORE_ITEMS = [
+    { id: 'overclock', icon: '⚡', name: 'Overclock', desc: 'Production ×3 for 90 seconds.',
+      cooldown: 100000,
+      cost: function () { return perSecond() * 45 + clickValue() * 25; },
+      buy: function () {
+        addFX('prod', 3, 90000, 'Overclocked ×3', true);
+        log('You push every dish past spec. Ninety seconds of more than it should give.');
+        blip(880, 0.2, 'triangle');
+      } },
+
+    { id: 'steadyhands', icon: '👆', name: 'Steady Hands', desc: 'Ping yield ×4 for 90 seconds.',
+      cooldown: 100000,
+      cost: function () { return perSecond() * 45 + clickValue() * 25; },
+      buy: function () {
+        addFX('click', 4, 90000, 'Steady hands ×4', true);
+        log('Your hands stop shaking. For ninety seconds every ping lands exactly where you mean it to.');
+        blip(880, 0.2, 'triangle');
+      } },
+
+    { id: 'ventpressure', icon: '💨', name: 'Vent The Pressure', desc: 'Instantly clears 30 dread.',
+      cooldown: 90000,
+      cost: function () { return perSecond() * 30 + clickValue() * 15; },
+      buy: function () {
+        addDread(-30);
+        log('You open every vent at once. The pressure drops all at once, and so do you, briefly.');
+        blip(300, 0.3, 'sine', 0.05);
+      } },
+
+    { id: 'pushit', icon: '🔥', name: 'Push It', desc: 'Production ×6 for 60 seconds — but +20 dread.',
+      cooldown: 90000,
+      cost: function () { return perSecond() * 25 + clickValue() * 12; },
+      buy: function () {
+        addFX('prod', 6, 60000, 'Pushed too hard ×6', true);
+        addDread(20);
+        log('You take the safeties off. It gives you everything, and it wants something back for it.', 'bad');
+        blip(140, 0.3, 'sawtooth', 0.06);
+      } },
+
+    { id: 'badtrade', icon: '🤝', name: 'Bad Trade', desc: 'Production ×10 for 45 seconds — plus it takes 10% of what you have left.',
+      cooldown: 90000,
+      cost: function () { return perSecond() * 20 + clickValue() * 10; },
+      buy: function () {
+        const loss = loseSignalPct(0.1);
+        addFX('prod', 10, 45000, 'Bad trade ×10', true);
+        log('It gives back tenfold, for a while. On the way out it takes ' + fmt(loss) + ' more. It never said the price was final.', 'bad');
+        blip(200, 0.35, 'sawtooth', 0.06);
+      } }
+  ];
+
+  let storeCooldown = {};
+
   // ---------------------------------------------------------------- flavour
 
   const NEWS = [
@@ -862,7 +954,7 @@
   // #tab-dev markup, the DEV tab button, and 'dev' from the tab-name arrays.
   const DEV = { infSignal: false, noDread: false, infDark: false,
                 noEvents: false, noTravellers: false, godMode: false,
-                freeDark: false, noChests: false };
+                freeDark: false, noChests: false, noWatcher: false };
 
   let S = blank();
 
@@ -876,6 +968,7 @@
       goodEvents: 0, badEvents: 0,
       level: 1, darkSpent: 0,
       chests: 0, chestGood: 0, chestBad: 0,
+      watchers: 0,
       playtime: 0, best: 0,
       started: Date.now(), lastSave: Date.now(),
       buy: 1, muted: false
@@ -950,7 +1043,7 @@
   // something — a price that rises with your level, from day one.
   function darkCost() {
     if (DEV.freeDark) return 0;
-    return levelReq(S.level) * 0.04 * mods.darkCost;
+    return Math.max(125, levelReq(S.level) * 0.04 * mods.darkCost);
   }
   function canAffordDark() { return DEV.infSignal || S.signal >= darkCost(); }
 
@@ -1237,6 +1330,45 @@
     rctx.stroke();
   }
 
+  // ============================================================ signal trace
+  // A second thing to watch besides the radar: a scrolling oscilloscope trace
+  // of the array's own output. Amplitude tracks production, jitter tracks
+  // dread, and the line shifts from the station's calm teal toward dread red
+  // as CALM gives way to THRESHOLD. Each ping sends a pulse through it.
+
+  const scopeCv = $('scope');
+  const octx = scopeCv.getContext('2d');
+  let scopeBuf = new Array(96).fill(0);
+  let scopePulse = 0;
+
+  function drawScope(dt) {
+    const dread = S.dread;
+    const loud = Math.min(1, Math.log10(1 + perSecond()) / 30);
+    const jitter = 0.05 + (dread / 100) * 0.35;
+    const t = Date.now() / 1000;
+
+    if (scopePulse > 0) scopePulse = Math.max(0, scopePulse - dt * 0.0025);
+
+    scopeBuf.shift();
+    const noise = (Math.random() - 0.5) * jitter;
+    const base = Math.sin(t * (2 + dread / 20)) * (0.12 + loud * 0.55);
+    scopeBuf.push(Math.max(-1, Math.min(1, base + noise + scopePulse)));
+
+    const w = scopeCv.width, h = scopeCv.height, mid = h / 2;
+    octx.clearRect(0, 0, w, h);
+    octx.beginPath();
+    const step = w / (scopeBuf.length - 1);
+    scopeBuf.forEach(function (v, i) {
+      const x = i * step, y = mid - v * (mid - 4);
+      if (i === 0) octx.moveTo(x, y); else octx.lineTo(x, y);
+    });
+    const hot = dread / 100;
+    octx.strokeStyle = 'rgba(' + Math.round(63 + hot * (194 - 63)) + ',' +
+      Math.round(167 + hot * (69 - 167)) + ',' + Math.round(160 + hot * (63 - 160)) + ',.9)';
+    octx.lineWidth = 1.5;
+    octx.stroke();
+  }
+
   function ping(clientX, clientY) {
     if (isDark() && !mods.darkKeeps) {
       floater(clientX || window.innerWidth / 2, clientY || 200, 'silent', '#6b7180');
@@ -1256,6 +1388,7 @@
     }
 
     pulse = 1;
+    scopePulse = 1;
     const wrong = S.dread > 60 && Math.random() < 0.12;
     blip(wrong ? 90 + Math.random() * 40 : 420 + Math.random() * 90, wrong ? 0.16 : 0.05,
          wrong ? 'sawtooth' : 'square');
@@ -1322,6 +1455,50 @@
       blip(1200, 0.16, 'triangle');
     }
     scheduleWave();
+  });
+
+  // ================================================================= watcher
+  // Something else to keep an eye on besides the radar. It shows up
+  // somewhere on screen and gives you eight seconds to look at it. Look and
+  // it backs off; don't, and it doesn't.
+
+  let nextWatcher = 0;
+  const watcherEl = $('watcher');
+
+  function scheduleWatcher() {
+    nextWatcher = Date.now() + 150000 + Math.random() * 150000;
+  }
+
+  function spawnWatcher() {
+    watcherEl.classList.add('on');
+    watcherEl.style.left = (60 + Math.random() * Math.max(60, window.innerWidth - 180)) + 'px';
+    watcherEl.style.top = (80 + Math.random() * Math.max(60, window.innerHeight - 220)) + 'px';
+    blip(180, 0.3, 'sawtooth', 0.05);
+    clearTimeout(watcherEl._t);
+    watcherEl._t = setTimeout(function () {
+      watcherEl.classList.remove('on');
+      addDread(22);
+      addFX('prod', 0.6, 45000, 'It is still watching', false);
+      log('You did not look back in time. It is still watching, and the array runs worse for it.', 'bad');
+      blip(60, 0.6, 'sawtooth', 0.09);
+      shake();
+      recompute();
+    }, 8000);
+  }
+
+  watcherEl.addEventListener('click', function (e) {
+    watcherEl.classList.remove('on');
+    clearTimeout(watcherEl._t);
+    S.watchers++;
+    const v = perSecond() * 90 + clickValue() * 15;
+    grantSignal(v);
+    addDread(-8);
+    floater(e.clientX, e.clientY, '+' + fmt(v), '#c2453f');
+    log('You look back before it finishes looking at you. It does not like being seen. (+' + fmt(v) + ' signal, −8 dread)');
+    blip(720, 0.14, 'triangle');
+    scheduleWatcher();
+    recompute();
+    refreshLists();
   });
 
   // ================================================================== chests
@@ -2435,29 +2612,104 @@
     return UPGRADES.filter(function (u) { return !S.upgrades[u.id] && u.req(S); });
   }
 
+  const upRows = {};
+
+  // Unlike the store, the list of available upgrades actually changes
+  // membership over time (upgrades leave once bought, new ones enter once
+  // requirements are met) — but UPGRADES.filter() always preserves the
+  // original array order, so once two rows are both visible their relative
+  // order never changes. That means rows only need to move when something
+  // ahead of them is removed or something new is inserted ahead of them;
+  // an unaffected row can be left untouched (see refreshStore()'s comment
+  // for why a full rebuild was flickering hovered rows).
   function refreshUpgrades() {
     const list = availableUpgrades();
     $('upbadge').textContent = list.length;
     $('upbadge').style.display = list.length ? '' : 'none';
 
     const host = $('uplist');
-    host.innerHTML = '';
+    const wantIds = {};
+    list.forEach(function (u) { wantIds[u.id] = true; });
+
+    Object.keys(upRows).forEach(function (id) {
+      if (!wantIds[id]) { upRows[id].row.remove(); delete upRows[id]; }
+    });
+
     if (!list.length) {
-      host.innerHTML = '<div class="card" style="color:var(--muted);font-size:12px">' +
-        'No upgrades available yet — buy more antennas, keep pinging, and survive things.</div>';
+      if (!host._empty) {
+        host.innerHTML = '<div class="card" style="color:var(--muted);font-size:12px">' +
+          'No upgrades available yet — buy more antennas, keep pinging, and survive things.</div>';
+        host._empty = true;
+      }
       return;
     }
+    if (host._empty) { host.innerHTML = ''; host._empty = false; }
+
+    let prev = null;
     list.forEach(function (u) {
       const can = S.signal >= u.cost;
+      let r = upRows[u.id];
+      if (!r) {
+        const row = document.createElement('div');
+        row.innerHTML =
+          '<div class="glyph">' + u.icon + '</div>' +
+          '<div><div class="name">' + u.name + '</div><div class="desc">' + u.desc + '</div></div>' +
+          '<div class="right-col"><div class="cost mono"></div></div>';
+        row.addEventListener('click', function () { buyUpgrade(u); });
+        r = upRows[u.id] = { row: row, cost: row.querySelector('.cost') };
+      }
+      const wantNext = prev ? prev.nextSibling : host.firstChild;
+      if (wantNext !== r.row) host.insertBefore(r.row, wantNext);
+      prev = r.row;
+
+      r.row.className = 'row ' + (can ? 'can' : 'cant');
+      r.cost.textContent = fmt(u.cost);
+      r.cost.className = 'cost mono ' + (can ? 'can' : 'cant');
+    });
+  }
+
+  function buyStoreItem(item) {
+    const now = Date.now();
+    if (storeCooldown[item.id] && storeCooldown[item.id] > now) { blip(140, 0.06, 'sawtooth'); return; }
+    const cost = item.cost();
+    if (S.signal < cost) { blip(140, 0.06, 'sawtooth'); return; }
+    S.signal -= cost;
+    storeCooldown[item.id] = now + item.cooldown;
+    item.buy();
+    recompute();
+    refreshLists();
+  }
+
+  const storeRows = {};
+
+  function buildStore() {
+    const host = $('storelist');
+    STORE_ITEMS.forEach(function (item) {
       const row = document.createElement('div');
-      row.className = 'row ' + (can ? 'can' : 'cant');
       row.innerHTML =
-        '<div class="glyph">' + u.icon + '</div>' +
-        '<div><div class="name">' + u.name + '</div><div class="desc">' + u.desc + '</div></div>' +
-        '<div class="right-col"><div class="cost mono ' + (can ? 'can' : 'cant') + '">' +
-        fmt(u.cost) + '</div></div>';
-      row.addEventListener('click', function () { buyUpgrade(u); });
+        '<div class="glyph">' + item.icon + '</div>' +
+        '<div><div class="name">' + item.name + '</div><div class="desc">' + item.desc + '</div></div>' +
+        '<div class="right-col"><div class="cost mono"></div></div>';
+      row.addEventListener('click', function () { buyStoreItem(item); });
       host.appendChild(row);
+      storeRows[item.id] = { row: row, cost: row.querySelector('.cost') };
+    });
+  }
+
+  // Updates the existing rows in place rather than tearing down and
+  // rebuilding the list (like buildGens()/refreshGens()) — a full rebuild on
+  // every ~120ms repaint was destroying whatever row the mouse was hovering,
+  // which read as a flicker.
+  function refreshStore() {
+    const now = Date.now();
+    STORE_ITEMS.forEach(function (item) {
+      const r = storeRows[item.id];
+      const cost = item.cost();
+      const cool = (storeCooldown[item.id] || 0) - now;
+      const can = S.signal >= cost && cool <= 0;
+      r.row.className = 'row ' + (can ? 'can' : 'cant');
+      r.cost.textContent = cool > 0 ? Math.ceil(cool / 1000) + 's' : fmt(cost);
+      r.cost.className = 'cost mono ' + (can ? 'can' : 'cant');
     });
   }
 
@@ -2525,6 +2777,7 @@
 
   function refreshLists() {
     refreshUpgrades();
+    if (currentTab === 'store') refreshStore();
     if (currentTab === 'logs') refreshAchs();
     if (currentTab === 'stats') refreshStats();
     if (currentTab === 'transmit') refreshTransmit();
@@ -2730,7 +2983,8 @@
       toggle('noTravellers', 'No travellers'),
       toggle('godMode', 'God mode (lose nothing)'),
       toggle('freeDark', 'Free GO DARK'),
-      toggle('noChests', 'No chests')
+      toggle('noChests', 'No chests'),
+      toggle('noWatcher', 'No watcher')
     ]);
 
     section('Signal', [
@@ -2778,7 +3032,8 @@
       btn('+10 Echoes', function () { S.echoes += 10; }),
       btn('+100 Echoes', function () { S.echoes += 100; }),
       btn('+1 Scar', function () { S.scars++; }),
-      btn('Clear Echoes/Scars', function () { S.echoes = 0; S.scars = 0; })
+      btn('Clear Echoes/Scars', function () { S.echoes = 0; S.scars = 0; }),
+      btn('Clear store cooldowns', function () { storeCooldown = {}; })
     ]);
 
     section('Spawn', [
@@ -2790,7 +3045,8 @@
       btn('Random traveller', function () { fireTraveller(); }),
       btn('Chest (random)', function () { spawnChest(); }),
       btn('Chest (loot)', function () { spawnChest('good'); }),
-      btn('Chest (ruin)', function () { spawnChest('bad'); })
+      btn('Chest (ruin)', function () { spawnChest('bad'); }),
+      btn('Watcher', function () { spawnWatcher(); })
     ]);
 
     // one button per traveller, so every encounter can be read end to end
@@ -2836,7 +3092,7 @@
     Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (t) {
       t.classList.toggle('on', t.dataset.tab === currentTab);
     });
-    ['array', 'upgrades', 'logs', 'transmit', 'stats', 'dev'].forEach(function (t) {
+    ['array', 'upgrades', 'store', 'logs', 'transmit', 'stats', 'dev'].forEach(function (t) {
       const el = $('tab-' + t);
       if (el) el.hidden = t !== currentTab;
     });
@@ -3059,11 +3315,15 @@
     if (!nextChest) scheduleChest();
     if (noticed() && !DEV.noChests && Date.now() >= nextChest) { spawnChest(); scheduleChest(); }
 
+    if (!nextWatcher) scheduleWatcher();
+    if (noticed() && !DEV.noWatcher && Date.now() >= nextWatcher) { spawnWatcher(); scheduleWatcher(); }
+
     if (!noticed()) {
       // beneath notice: keep pushing the clocks forward so nothing fires
       scheduleEvent();
       scheduleTraveller();
       scheduleChest();
+      scheduleWatcher();
     } else {
       if (!DEV.noEvents && Date.now() >= nextEvent) { fireEvent(); scheduleEvent(); }
       if (!DEV.noTravellers && Date.now() >= nextTraveller && !encounterOpen) {
@@ -3082,6 +3342,7 @@
     $('scars').textContent = S.scars;
 
     drawRadar(dt);
+    drawScope(dt);
     refreshDread();
     updateDrone();
 
@@ -3110,6 +3371,7 @@
       refreshChips();
       if (currentTab === 'array') refreshGens();
       if (currentTab === 'upgrades') refreshUpgrades();
+      if (currentTab === 'store') refreshStore();
       if (currentTab === 'stats') refreshStats();
       if (currentTab === 'transmit') refreshTransmit();
       if (currentTab === 'logs') refreshAchs();
@@ -3127,6 +3389,7 @@
   const hadSave = load();
   recompute();
   buildGens();
+  buildStore();
   refreshLists();
   devBuild();                                   // DEV PANEL — remove with the rest
   $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
