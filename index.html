@@ -359,35 +359,94 @@
   #winfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
 
   /* -------------------------------------------------------------- menu */
+  #menuscreen { display: block; } /* absolute-positioned children, not flex-centered */
+  #menufx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+
+  .menu-titlewrap {
+    position: absolute; left: 50%; top: 32%; transform: translate(-50%, -50%);
+    z-index: 1; text-align: center;
+  }
+  .menu-glow {
+    position: absolute; left: 50%; top: 40%; width: 480px; height: 260px;
+    transform: translate(-50%, -50%); pointer-events: none; z-index: -1;
+    background: radial-gradient(closest-side, rgba(194,69,63,.4), rgba(194,69,63,0) 72%);
+    filter: blur(6px);
+    animation: menuglow 3.6s ease-in-out infinite;
+  }
+  @keyframes menuglow {
+    0%, 100% { opacity: .5; transform: translate(-50%, -50%) scale(1); }
+    50% { opacity: .85; transform: translate(-50%, -50%) scale(1.1); }
+  }
   .menu-title {
     position: relative; font-size: 40px; letter-spacing: .34em; font-weight: 600;
     color: var(--dread); text-transform: uppercase;
+    animation: titleflick 1.7s steps(1) infinite;
   }
   .menu-title::after {
     content: attr(data-text);
     position: absolute; inset: 0; color: #fff;
-    clip-path: inset(0 0 0 52%);
     text-shadow: -2px 0 var(--accent), 2px 0 var(--dread);
-    animation: titleglitch 3.2s steps(1) infinite;
+    animation: titleghost 1.7s steps(1) infinite;
   }
-  @keyframes titleglitch {
-    0%, 74%, 100% { opacity: 0; transform: translate(0,0); clip-path: inset(0 0 0 52%); }
-    75% { opacity: .85; transform: translate(-3px, 1px); clip-path: inset(0 0 0 52%); }
-    77% { opacity: .15; transform: translate(2px,-1px); clip-path: inset(0 0 0 40%); }
-    80% { opacity: .9; transform: translate(-2px, 0); clip-path: inset(0 0 0 58%); }
-    82% { opacity: 0; }
-    91% { opacity: 0; }
-    92% { opacity: .6; transform: translate(3px,0); clip-path: inset(0 0 0 46%); }
-    94% { opacity: 0; }
+  @keyframes titleflick {
+    0%, 100% { opacity: 1; }
+    3% { opacity: .2; } 5% { opacity: .95; } 7% { opacity: .1; } 9% { opacity: 1; }
+    38% { opacity: 1; } 40% { opacity: .3; } 42% { opacity: 1; }
+    68% { opacity: 1; } 70% { opacity: .15; } 72% { opacity: .8; } 74% { opacity: 1; }
+  }
+  @keyframes titleghost {
+    0%, 100% { opacity: 0; }
+    3% { opacity: .65; } 5% { opacity: 0; } 7% { opacity: .8; } 9% { opacity: 0; }
+    40% { opacity: .55; } 42% { opacity: 0; }
+    70% { opacity: .7; } 72% { opacity: 0; }
   }
   .menu-sub {
     font-size: 11px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase;
     margin-top: -6px;
   }
-  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 4px; }
-  .menu-achs {
-    width: 100%; max-width: 640px; margin-top: 4px; max-height: 46vh; overflow-y: auto; padding: 2px;
+
+  .menu-play {
+    position: absolute; left: 50%; top: 63%; transform: translate(-50%, -50%);
+    z-index: 1; padding: 13px 50px; border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--dread); color: #fff;
+    font-family: inherit; font-size: 13px; letter-spacing: .3em; text-transform: uppercase;
+    cursor: pointer;
   }
+  .menu-play:hover { background: #1d0e0e; box-shadow: 0 0 26px rgba(194,69,63,.4); }
+
+  .menu-sidetabs {
+    position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+    z-index: 2; display: flex; flex-direction: column; gap: 10px;
+  }
+  .menu-sidetab {
+    writing-mode: vertical-rl; text-orientation: mixed;
+    padding: 18px 9px; border-radius: 8px;
+    background: var(--panel); border: 1px solid #3a1414; color: var(--muted);
+    font-family: inherit; font-size: 10px; letter-spacing: .22em; cursor: pointer;
+  }
+  .menu-sidetab:hover { color: #fff; border-color: var(--dread); background: #150c0c; }
+
+  .menu-panel {
+    position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.93);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 40px;
+    opacity: 0; pointer-events: none; transition: opacity .35s ease;
+  }
+  .menu-panel.on { opacity: 1; pointer-events: auto; }
+  .menu-panel-head {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; max-width: 640px;
+  }
+  .menu-panel-title { font-size: 11px; letter-spacing: .3em; color: var(--dread); }
+  .menu-panel-close {
+    width: 28px; height: 28px; border-radius: 6px; background: var(--panel);
+    border: 1px solid var(--line); color: var(--muted); font-size: 15px; line-height: 1;
+    cursor: pointer;
+  }
+  .menu-panel-close:hover { color: #fff; border-color: var(--dread); }
+
+  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
+  .menu-achs { width: 100%; max-width: 640px; max-height: 50vh; overflow-y: auto; padding: 2px; }
   .menu-slot { display: flex; gap: 8px; }
   .menu-slot-main {
     flex: 1; text-align: left; padding: 13px 16px; border-radius: 8px;
@@ -592,14 +651,36 @@
 </div>
 
 <div class="storyscreen dark" id="menuscreen">
-  <div class="menu-title" data-text="VOID SIGNAL">VOID SIGNAL</div>
-  <div class="menu-sub">DERELICT LISTENING STATION · SECTOR 9</div>
-  <div class="tabs" id="menutabs">
-    <button class="tab on" data-mtab="slots">CONTINUE</button>
-    <button class="tab" data-mtab="achs">ACHIEVEMENTS</button>
+  <canvas id="menufx"></canvas>
+
+  <div class="menu-titlewrap">
+    <div class="menu-glow"></div>
+    <div class="menu-title" data-text="VOID SIGNAL">VOID SIGNAL</div>
+    <div class="menu-sub">DERELICT LISTENING STATION · SECTOR 9</div>
   </div>
-  <div class="menu-slots" id="menuslots"></div>
-  <div class="menu-achs ach-grid" id="menuachs" hidden></div>
+
+  <button class="menu-play" id="menuplay">PLAY</button>
+
+  <div class="menu-sidetabs">
+    <button class="menu-sidetab" id="opensaves">SAVES</button>
+    <button class="menu-sidetab" id="openachs">ACHIEVEMENTS</button>
+  </div>
+
+  <div class="menu-panel" id="savespanel">
+    <div class="menu-panel-head">
+      <div class="menu-panel-title">SAVE SLOTS</div>
+      <button class="menu-panel-close" data-close>&times;</button>
+    </div>
+    <div class="menu-slots" id="menuslots"></div>
+  </div>
+
+  <div class="menu-panel" id="achspanel">
+    <div class="menu-panel-head">
+      <div class="menu-panel-title">ACHIEVEMENTS</div>
+      <button class="menu-panel-close" data-close>&times;</button>
+    </div>
+    <div class="menu-achs ach-grid" id="menuachs"></div>
+  </div>
 </div>
 
 <div class="storyscreen dark" id="introscreen">
@@ -3864,6 +3945,98 @@ Wherever the signal was going, you're already there.
     menuThumpIv = null;
   }
 
+  // Looping ambient background for the menu: tentacles breathing up and
+  // down (not resolving like the ending's do) plus small drifting sparks.
+  let menuFxOn = false;
+
+  function startMenuFX() {
+    const canvas = $('menufx');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    const n = 9;
+    const tendrils = [];
+    for (let i = 0; i < n; i++) {
+      tendrils.push({
+        x: canvas.width * (0.05 + 0.9 * (i / (n - 1))) + (Math.random() - 0.5) * 40,
+        base: canvas.height * (0.2 + Math.random() * 0.16),
+        riseSpeed: 0.16 + Math.random() * 0.12,
+        phase: Math.random() * Math.PI * 2,
+        sway: 18 + Math.random() * 28,
+        swaySpeed: 0.35 + Math.random() * 0.3,
+        width: 8 + Math.random() * 8
+      });
+    }
+
+    const sparks = [];
+    function spawnSpark() {
+      sparks.push({
+        x: canvas.width * (0.15 + Math.random() * 0.7),
+        y: canvas.height * (0.55 + Math.random() * 0.4),
+        vx: (Math.random() - 0.5) * 10,
+        vy: -(10 + Math.random() * 18),
+        life: 0,
+        maxLife: 1.6 + Math.random() * 1.6,
+        r: 1 + Math.random() * 1.6
+      });
+    }
+
+    const start = performance.now();
+    let last = start;
+    let sparkTimer = 0;
+    menuFxOn = true;
+
+    function frame(now) {
+      if (!menuFxOn) return;
+      const dt = Math.min(now - last, 100) / 1000;
+      last = now;
+      const t = (now - start) / 1000;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.lineCap = 'round';
+      tendrils.forEach(function (tn) {
+        const rise = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * tn.riseSpeed + tn.phase));
+        const h = tn.base * rise;
+        const midx = tn.x + Math.sin(t * tn.swaySpeed + tn.phase) * tn.sway;
+        const tipx = tn.x + Math.sin(t * tn.swaySpeed * 0.7 + tn.phase + 1) * tn.sway * 1.3;
+        const by = canvas.height + 20;
+        const midY = by - h * 0.55;
+        const tipY = by - h;
+        ctx.strokeStyle = 'rgba(10,8,14,' + (0.15 + 0.4 * rise).toFixed(3) + ')';
+        ctx.lineWidth = tn.width * (0.5 + 0.5 * rise);
+        ctx.beginPath();
+        ctx.moveTo(tn.x, by);
+        ctx.quadraticCurveTo(midx, midY, tipx, tipY);
+        ctx.stroke();
+      });
+
+      sparkTimer += dt;
+      if (sparkTimer > 0.35) { sparkTimer = 0; if (sparks.length < 26) spawnSpark(); }
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+        s.life += dt;
+        if (s.life >= s.maxLife) { sparks.splice(i, 1); continue; }
+        s.x += s.vx * dt;
+        s.y += s.vy * dt;
+        s.vy *= 0.995;
+        const a = 1 - s.life / s.maxLife;
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(255,150,80,' + (a * 0.9).toFixed(3) + ')';
+        ctx.shadowColor = 'rgba(255,150,80,0.85)';
+        ctx.shadowBlur = 6;
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+      }
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function stopMenuFX() { menuFxOn = false; }
+
   function buildMenu() {
     const host = $('menuslots');
     host.innerHTML = '';
@@ -3908,23 +4081,33 @@ Wherever the signal was going, you're already there.
     });
   }
 
-  function chooseSlot(n) {
-    currentSlot = n;
-    $('menuscreen').classList.remove('on');
-    stopMenuThump();
-    bootGame();
+  function openMenuPanel(id) {
+    $('savespanel').classList.toggle('on', id === 'saves');
+    $('achspanel').classList.toggle('on', id === 'achs');
+  }
+  function closeMenuPanels() {
+    $('savespanel').classList.remove('on');
+    $('achspanel').classList.remove('on');
   }
 
-  $('menutabs').addEventListener('click', function (e) {
-    const b = e.target.closest('.tab');
-    if (!b) return;
-    Array.prototype.forEach.call($('menutabs').children, function (t) {
-      t.classList.toggle('on', t === b);
-    });
-    const onAchs = b.dataset.mtab === 'achs';
-    $('menuslots').hidden = onAchs;
-    $('menuachs').hidden = !onAchs;
+  $('opensaves').addEventListener('click', function () { openMenuPanel('saves'); });
+  $('openachs').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
+  $('menuplay').addEventListener('click', function () { openMenuPanel('saves'); });
+  Array.prototype.forEach.call(document.querySelectorAll('.menu-panel-close'), function (b) {
+    b.addEventListener('click', closeMenuPanels);
   });
+
+  function chooseSlot(n) {
+    currentSlot = n;
+    closeMenuPanels();
+    stopMenuThump();
+    stopMenuFX();
+    // Boot while the menu is still fully opaque, so the game UI it builds
+    // never gets a chance to show through — only fade the menu away once
+    // the intro screen (added by bootGame -> showIntro) is fully in place.
+    bootGame();
+    setTimeout(function () { $('menuscreen').classList.remove('on'); }, 1450);
+  }
 
   function showMenu() {
     migrateLegacySave();
@@ -3937,6 +4120,7 @@ Wherever the signal was going, you're already there.
       if (audio && audio.state === 'suspended') { try { audio.resume(); } catch (e) {} }
     }, { once: true });
     startMenuThump();
+    startMenuFX();
   }
 
   // =================================================================== boot
