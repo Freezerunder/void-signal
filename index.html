@@ -314,7 +314,7 @@
 
   .modal {
     position: fixed; inset: 0; background: rgba(4,5,8,.86); backdrop-filter: blur(4px);
-    display: none; align-items: center; justify-content: center; z-index: 60; padding: 20px;
+    display: none; align-items: center; justify-content: center; z-index: 250; padding: 20px;
   }
   .modal.on { display: flex; }
   .modal .box {
@@ -357,6 +357,48 @@
     animation: flick 2.2s steps(1) infinite;
   }
   #winfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+
+  /* -------------------------------------------------------------- menu */
+  .menu-title {
+    position: relative; font-size: 40px; letter-spacing: .34em; font-weight: 600;
+    color: var(--dread); text-transform: uppercase;
+  }
+  .menu-title::after {
+    content: attr(data-text);
+    position: absolute; inset: 0; color: #fff;
+    clip-path: inset(0 0 0 52%);
+    text-shadow: -2px 0 var(--accent), 2px 0 var(--dread);
+    animation: titleglitch 3.2s steps(1) infinite;
+  }
+  @keyframes titleglitch {
+    0%, 74%, 100% { opacity: 0; transform: translate(0,0); clip-path: inset(0 0 0 52%); }
+    75% { opacity: .85; transform: translate(-3px, 1px); clip-path: inset(0 0 0 52%); }
+    77% { opacity: .15; transform: translate(2px,-1px); clip-path: inset(0 0 0 40%); }
+    80% { opacity: .9; transform: translate(-2px, 0); clip-path: inset(0 0 0 58%); }
+    82% { opacity: 0; }
+    91% { opacity: 0; }
+    92% { opacity: .6; transform: translate(3px,0); clip-path: inset(0 0 0 46%); }
+    94% { opacity: 0; }
+  }
+  .menu-sub {
+    font-size: 11px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase;
+    margin-top: -6px;
+  }
+  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 12px; }
+  .menu-slot { display: flex; gap: 8px; }
+  .menu-slot-main {
+    flex: 1; text-align: left; padding: 13px 16px; border-radius: 8px;
+    background: var(--panel); border: 1px solid #3a1414; color: var(--text);
+    font-family: inherit; cursor: pointer; display: flex; flex-direction: column; gap: 3px;
+  }
+  .menu-slot-main:hover { border-color: var(--dread); background: #150c0c; }
+  .menu-slot-main .slotn { font-size: 11px; letter-spacing: .2em; color: var(--dread); }
+  .menu-slot-main .slotinfo { font-size: 12px; color: var(--muted); }
+  .menu-slot-wipe {
+    padding: 0 14px; border-radius: 8px; background: var(--panel); border: 1px solid #3a1414;
+    color: var(--dread); font-family: inherit; font-size: 10px; letter-spacing: .1em; cursor: pointer;
+  }
+  .menu-slot-wipe:hover { background: #2a1010; }
 
   /* ------------------------------------------------- DEV PANEL START ---- */
   .tab.dev { border-color: #6b3f8f; color: #c48fd6; }
@@ -544,6 +586,12 @@
     <div class="opts" id="modal-opts"></div>
     <div class="timerbar" id="modal-timerwrap" hidden><i id="modal-timer"></i></div>
   </div>
+</div>
+
+<div class="storyscreen dark" id="menuscreen">
+  <div class="menu-title" data-text="VOID SIGNAL">VOID SIGNAL</div>
+  <div class="menu-sub">DERELICT LISTENING STATION · SECTOR 9</div>
+  <div class="menu-slots" id="menuslots"></div>
 </div>
 
 <div class="storyscreen dark" id="introscreen">
@@ -1008,6 +1056,10 @@ Wherever the signal was going, you're already there.
   // =================================================================== state
 
   const SAVE_KEY = 'voidsignal.save.v2';
+  const SLOT_PREFIX = SAVE_KEY + '.slot';
+  const SLOT_COUNT = 4;
+  let currentSlot = 1;
+  function slotKey(n) { return SLOT_PREFIX + n; }
 
   // ---- DEV (testing only) -------------------------------------------------
   // Declared here so the game logic can read it. To strip the dev tools out
@@ -3360,7 +3412,7 @@ Wherever the signal was going, you're already there.
   function save(quiet) {
     S.lastSave = Date.now();
     try {
-      localStorage.setItem(SAVE_KEY, JSON.stringify(S));
+      localStorage.setItem(slotKey(currentSlot), JSON.stringify(S));
       if (!quiet) { $('savenote').textContent = 'Saved at ' + new Date().toLocaleTimeString(); }
     } catch (e) {
       storageOK = false;
@@ -3368,9 +3420,30 @@ Wherever the signal was going, you're already there.
     }
   }
 
+  // pre-slots saves lived under the bare SAVE_KEY — pull one into Slot 1
+  // (without touching the original) so nobody's progress just vanishes.
+  function migrateLegacySave() {
+    try {
+      const legacy = localStorage.getItem(SAVE_KEY);
+      if (legacy && !localStorage.getItem(slotKey(1))) {
+        localStorage.setItem(slotKey(1), legacy);
+      }
+    } catch (e) {}
+  }
+
+  function slotSummary(n) {
+    let raw = null;
+    try { raw = localStorage.getItem(slotKey(n)); } catch (e) { return null; }
+    if (!raw) return null;
+    try {
+      const d = JSON.parse(raw);
+      return { level: Math.max(1, levelFromTotal(d.total || 0)), playtime: d.playtime || 0 };
+    } catch (e) { return null; }
+  }
+
   function load() {
     let raw = null;
-    try { raw = localStorage.getItem(SAVE_KEY); }
+    try { raw = localStorage.getItem(slotKey(currentSlot)); }
     catch (e) { storageOK = false; return false; }
     if (!raw) return false;
 
@@ -3413,7 +3486,7 @@ Wherever the signal was going, you're already there.
       text: 'This erases everything — signal, antennas, upgrades, Echoes, scars and discoveries. There is no undo.',
       options: [
         { label: 'Wipe it', danger: true, run: function () {
-            try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+            try { localStorage.removeItem(slotKey(currentSlot)); } catch (e) {}
             S = blank();
             FX = []; frenzyUntil = 0; darkUntil = 0; darkCooldown = 0;
             recompute();
@@ -3698,30 +3771,111 @@ Wherever the signal was going, you're already there.
     }, { once: true });
   }
 
+  // ============================================================= slot menu
+
+  let menuThumpIv = null;
+
+  function startMenuThump() {
+    ensureAudio();
+    if (menuThumpIv) return;
+    menuThumpIv = setInterval(function () { blip(46, 0.4, 'sine', 0.11); }, 2600 + Math.random() * 800);
+  }
+
+  function stopMenuThump() {
+    if (menuThumpIv) clearInterval(menuThumpIv);
+    menuThumpIv = null;
+  }
+
+  function buildMenu() {
+    const host = $('menuslots');
+    host.innerHTML = '';
+    for (let n = 1; n <= SLOT_COUNT; n++) {
+      const info = slotSummary(n);
+      const row = document.createElement('div');
+      row.className = 'menu-slot';
+
+      const main = document.createElement('button');
+      main.className = 'menu-slot-main';
+      main.innerHTML = '<span class="slotn">SLOT ' + n + '</span><span class="slotinfo">' +
+        (info ? 'Level ' + info.level + ' · ' + fmtTime(info.playtime) + ' logged'
+              : 'Empty — start a new run') + '</span>';
+      main.addEventListener('click', function () { chooseSlot(n); });
+      row.appendChild(main);
+
+      if (info) {
+        const wipe = document.createElement('button');
+        wipe.className = 'menu-slot-wipe';
+        wipe.textContent = 'WIPE';
+        wipe.addEventListener('click', function (e) {
+          e.stopPropagation();
+          confirmWipeSlot(n);
+        });
+        row.appendChild(wipe);
+      }
+      host.appendChild(row);
+    }
+  }
+
+  function confirmWipeSlot(n) {
+    openEncounter({
+      kicker: 'DANGER', title: 'WIPE SLOT ' + n + '?',
+      text: 'This erases everything saved in Slot ' + n + '. There is no undo.',
+      options: [
+        { label: 'Wipe it', danger: true, run: function () {
+            try { localStorage.removeItem(slotKey(n)); } catch (e) {}
+            buildMenu();
+          } },
+        { label: 'Keep it', run: function () {} }
+      ]
+    });
+  }
+
+  function chooseSlot(n) {
+    currentSlot = n;
+    $('menuscreen').classList.remove('on');
+    stopMenuThump();
+    bootGame();
+  }
+
+  function showMenu() {
+    migrateLegacySave();
+    buildMenu();
+    $('menuscreen').classList.add('on');
+    $('menuscreen').addEventListener('click', function unlock() {
+      ensureAudio();
+      if (audio && audio.state === 'suspended') { try { audio.resume(); } catch (e) {} }
+    }, { once: true });
+    startMenuThump();
+  }
+
   // =================================================================== boot
 
-  const hadSave = load();
-  recompute();
-  buildGens();
-  buildStore();
-  refreshLists();
-  devBuild();                                   // DEV PANEL — remove with the rest
-  $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
+  function bootGame() {
+    const hadSave = load();
+    recompute();
+    buildGens();
+    buildStore();
+    refreshLists();
+    devBuild();                                   // DEV PANEL — remove with the rest
+    $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
 
-  Array.prototype.forEach.call($('buyamt').children, function (c) {
-    c.classList.toggle('on', (c.dataset.n === 'max' ? 'max' : parseInt(c.dataset.n, 10)) === S.buy);
-  });
+    Array.prototype.forEach.call($('buyamt').children, function (c) {
+      c.classList.toggle('on', (c.dataset.n === 'max' ? 'max' : parseInt(c.dataset.n, 10)) === S.buy);
+    });
 
-  if (hadSave) offlineCatchUp();
-  if (!storageOK) $('savenote').textContent = 'Storage unavailable — progress will not persist in this browser.';
+    if (hadSave) offlineCatchUp();
+    if (!storageOK) $('savenote').textContent = 'Storage unavailable — progress will not persist in this browser.';
 
-  log(hadSave ? 'Welcome back. The array never stopped listening. Neither did it.'
-              : 'Station online. Point the dish at the dark and start pinging.');
+    log(hadSave ? 'Welcome back. The array never stopped listening. Neither did it.'
+                : 'Station online. Point the dish at the dark and start pinging.');
 
-  window.addEventListener('beforeunload', function () { save(true); });
+    window.addEventListener('beforeunload', function () { save(true); });
 
-  showIntro();
-  requestAnimationFrame(frame);
+    showIntro();
+    requestAnimationFrame(frame);
+  }
+
+  showMenu();
 })();
 </script>
 </body>
