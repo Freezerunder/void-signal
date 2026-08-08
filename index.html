@@ -545,6 +545,11 @@
         <canvas id="spectro" width="250" height="54"></canvas>
       </div>
 
+      <div class="card scope-card">
+        <div class="label">Nearby Stations</div>
+        <canvas id="stations" width="250" height="54"></canvas>
+      </div>
+
       <div class="card dread-card">
         <div class="dread-top">
           <div class="label">Station Rating</div>
@@ -1436,8 +1441,18 @@ Wherever the signal was going, you're already there.
 
   let audio = null, drone = null, droneGain = null, ambientGain = null, heavenly = null;
 
+  // Safari/WebKit permanently locks an AudioContext created outside a real
+  // user gesture — resuming it later doesn't reliably unlock it. The menu's
+  // ambient thump used to call ensureAudio() on a timer at boot, before any
+  // click, which silently killed audio for the whole session. These capture
+  // listeners flip the flag before any bubble-phase handler runs, so the
+  // first genuine click/keydown unlocks audio synchronously within itself.
+  let audioUnlocked = false;
+  window.addEventListener('click', function () { audioUnlocked = true; }, { capture: true });
+  window.addEventListener('keydown', function () { audioUnlocked = true; }, { capture: true });
+
   function ensureAudio() {
-    if (audio) return;
+    if (audio || !audioUnlocked) return;
     try {
       audio = new (window.AudioContext || window.webkitAudioContext)();
       drone = audio.createOscillator();
@@ -1740,6 +1755,61 @@ Wherever the signal was going, you're already there.
         Math.round(baseB * v) + ',' + Math.min(1, v * 1.2) + ')';
       spctx.fillRect(w - 1, y, 1, 1);
     }
+  }
+
+  // ========================================================= nearby stations
+  // A handful of other listening posts sharing this feed. Not a mechanic —
+  // pure atmosphere: as dread climbs, more of them flicker out and stay dark,
+  // a quiet reminder that whatever is finding you might be finding them too.
+
+  const stationsCv = $('stations');
+  const stctx = stationsCv.getContext('2d');
+  const STATION_COUNT = 7;
+  let stationLevel = new Array(STATION_COUNT).fill(1);
+  let stationPhase = new Array(STATION_COUNT).fill(0).map(function () { return Math.random() * Math.PI * 2; });
+  let stationBias = new Array(STATION_COUNT).fill(0).map(function () { return Math.random(); });
+
+  function drawStations(dt) {
+    const w = stationsCv.width, h = stationsCv.height;
+    const hot = S.dread / 100;
+    const t = Date.now() / 1000;
+
+    stctx.clearRect(0, 0, w, h);
+
+    const margin = 14, spacing = (w - margin * 2) / (STATION_COUNT - 1);
+    for (let i = 0; i < STATION_COUNT; i++) {
+      // stations with a higher bias go dark earlier as dread rises
+      const target = Math.max(0, Math.min(1, 1 - hot * (0.7 + stationBias[i] * 0.6)));
+      stationLevel[i] += (target - stationLevel[i]) * Math.min(1, dt * 0.0015);
+      const flicker = 0.85 + 0.15 * Math.sin(t * (1.5 + stationBias[i] * 2) + stationPhase[i]);
+      const lvl = Math.max(0, stationLevel[i] * flicker);
+
+      const x = margin + i * spacing;
+      const barH = lvl * (h - 14);
+      const r = Math.round(63 + hot * (194 - 63));
+      const g = Math.round(167 + hot * (69 - 167));
+      const b = Math.round(160 + hot * (63 - 160));
+      const rgb = r + ',' + g + ',' + b;
+
+      stctx.strokeStyle = 'rgba(' + rgb + ',' + (0.15 + lvl * 0.75) + ')';
+      stctx.lineWidth = 2;
+      stctx.beginPath();
+      stctx.moveTo(x, h - 4);
+      stctx.lineTo(x, h - 4 - barH);
+      stctx.stroke();
+
+      stctx.fillStyle = lvl > 0.08 ? 'rgba(' + rgb + ',' + (0.4 + lvl * 0.6) + ')' : 'rgba(90,94,105,.5)';
+      stctx.beginPath();
+      stctx.arc(x, h - 4 - barH, lvl > 0.08 ? 2.2 : 1.4, 0, Math.PI * 2);
+      stctx.fill();
+    }
+
+    stctx.strokeStyle = 'rgba(255,255,255,0.05)';
+    stctx.lineWidth = 1;
+    stctx.beginPath();
+    stctx.moveTo(0, h - 3.5);
+    stctx.lineTo(w, h - 3.5);
+    stctx.stroke();
   }
 
   function ping(clientX, clientY) {
@@ -3776,6 +3846,7 @@ Wherever the signal was going, you're already there.
     drawRadar(dt);
     drawScope(dt);
     drawSpectro(dt);
+    drawStations(dt);
     refreshDread();
     updateDrone();
 
