@@ -415,38 +415,31 @@
     cursor: pointer;
   }
   .menu-play:hover { background: #1d0e0e; box-shadow: 0 0 26px rgba(194,69,63,.4); }
-  .menu-achbtn {
-    position: absolute; left: 50%; top: 71.5%; transform: translate(-50%, -50%);
-    z-index: 1; padding: 8px 22px; border-radius: 7px;
-    background: transparent; border: 1px solid var(--line); color: var(--muted);
-    font-family: inherit; font-size: 10.5px; letter-spacing: .24em; text-transform: uppercase;
-    cursor: pointer;
-  }
-  .menu-achbtn:hover { color: #fff; border-color: var(--dread); }
 
   .menu-sidetabs {
-    position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
+    position: absolute; top: 50%; transform: translateY(-50%);
     z-index: 2; display: flex; flex-direction: column; gap: 10px;
   }
+  .menu-sidetabs.right { right: 18px; }
+  .menu-sidetabs.left { left: 18px; }
   .menu-sidetab {
-    writing-mode: vertical-rl; text-orientation: mixed;
-    padding: 18px 9px; border-radius: 8px;
+    padding: 10px 16px; border-radius: 8px; white-space: nowrap;
     background: var(--panel); border: 1px solid #3a1414; color: var(--muted);
-    font-family: inherit; font-size: 10px; letter-spacing: .22em; cursor: pointer;
+    font-family: inherit; font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+    cursor: pointer;
   }
   .menu-sidetab:hover { color: #fff; border-color: var(--dread); background: #150c0c; }
 
   .menu-panel {
-    position: absolute; inset: 0; z-index: 5; background: rgba(0,0,0,.93);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 14px; padding: 40px;
-    opacity: 0; pointer-events: none; transition: opacity .35s ease;
+    position: absolute; top: 0; bottom: 0; z-index: 5; width: min(380px, 86vw);
+    background: rgba(0,0,0,.96); border: 1px solid var(--line);
+    display: flex; flex-direction: column; gap: 14px; padding: 28px 22px;
+    overflow-y: auto; pointer-events: none; transition: transform .35s ease;
   }
-  .menu-panel.on { opacity: 1; pointer-events: auto; }
-  .menu-panel-head {
-    display: flex; align-items: center; justify-content: space-between;
-    width: 100%; max-width: 640px;
-  }
+  .menu-panel.right { right: 0; border-right: none; transform: translateX(100%); }
+  .menu-panel.left { left: 0; border-left: none; transform: translateX(-100%); }
+  .menu-panel.on { pointer-events: auto; transform: translateX(0); }
+  .menu-panel-head { display: flex; align-items: center; justify-content: space-between; width: 100%; }
   .menu-panel-title { font-size: 11px; letter-spacing: .3em; color: var(--dread); }
   .menu-panel-close {
     width: 28px; height: 28px; border-radius: 6px; background: var(--panel);
@@ -455,9 +448,9 @@
   }
   .menu-panel-close:hover { color: #fff; border-color: var(--dread); }
 
-  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
-  .menu-achs { width: 100%; max-width: 640px; max-height: 50vh; overflow-y: auto; padding: 2px; }
-  .menu-settings { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; }
+  .menu-achs { width: 100%; padding: 2px; }
+  .menu-settings { width: 100%; display: flex; flex-direction: column; gap: 10px; }
   .setting-tog {
     display: flex; align-items: center; justify-content: space-between; gap: 12px;
     padding: 13px 16px; border-radius: 8px; text-align: left;
@@ -689,15 +682,16 @@
   </div>
 
   <button class="menu-play" id="menuplay">PLAY</button>
-  <button class="menu-achbtn" id="menuachbtn">ACHIEVEMENTS</button>
 
-  <div class="menu-sidetabs">
-    <button class="menu-sidetab" id="opensaves">SAVES</button>
+  <div class="menu-sidetabs left">
     <button class="menu-sidetab" id="openachs">ACHIEVEMENTS</button>
+  </div>
+  <div class="menu-sidetabs right">
+    <button class="menu-sidetab" id="opensaves">SAVES</button>
     <button class="menu-sidetab" id="opensettings">SETTINGS</button>
   </div>
 
-  <div class="menu-panel" id="savespanel">
+  <div class="menu-panel right" id="savespanel">
     <div class="menu-panel-head">
       <div class="menu-panel-title">SAVE SLOTS</div>
       <button class="menu-panel-close" data-close>&times;</button>
@@ -705,7 +699,7 @@
     <div class="menu-slots" id="menuslots"></div>
   </div>
 
-  <div class="menu-panel" id="achspanel">
+  <div class="menu-panel left" id="achspanel">
     <div class="menu-panel-head">
       <div class="menu-panel-title">ACHIEVEMENTS</div>
       <button class="menu-panel-close" data-close>&times;</button>
@@ -713,7 +707,7 @@
     <div class="menu-achs ach-grid" id="menuachs"></div>
   </div>
 
-  <div class="menu-panel" id="settingspanel">
+  <div class="menu-panel right" id="settingspanel">
     <div class="menu-panel-head">
       <div class="menu-panel-title">SETTINGS</div>
       <button class="menu-panel-close" data-close>&times;</button>
@@ -4270,7 +4264,6 @@ Wherever the signal was going, you're already there.
   $('openachs').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
   $('opensettings').addEventListener('click', function () { buildMenuSettings(); openMenuPanel('settings'); });
   $('menuplay').addEventListener('click', function () { openMenuPanel('saves'); });
-  $('menuachbtn').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
   Array.prototype.forEach.call(document.querySelectorAll('.menu-panel-close'), function (b) {
     b.addEventListener('click', closeMenuPanels);
   });
