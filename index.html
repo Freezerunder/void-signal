@@ -359,7 +359,11 @@
   #winfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
 
   /* -------------------------------------------------------------- menu */
-  #menuscreen { display: block; } /* absolute-positioned children, not flex-centered */
+  /* absolute-positioned children, not flex-centered; appears instantly on
+     load (no fade-in) so the not-yet-built game underneath never shows
+     through a transparent frame — only screens shown *after* the menu
+     (intro, etc) need the crossfade */
+  #menuscreen { display: block; transition: none; }
   #menufx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
 
   .menu-titlewrap {
@@ -453,6 +457,25 @@
 
   .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; }
   .menu-achs { width: 100%; max-width: 640px; max-height: 50vh; overflow-y: auto; padding: 2px; }
+  .menu-settings { width: 100%; max-width: 460px; display: flex; flex-direction: column; gap: 10px; }
+  .setting-tog {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 13px 16px; border-radius: 8px; text-align: left;
+    background: var(--panel); border: 1px solid #3a1414; color: var(--text);
+    font-family: inherit; cursor: pointer;
+  }
+  .setting-tog:hover { border-color: var(--dread); background: #150c0c; }
+  .setting-tog.on { border-color: var(--dread); background: #1d0e0e; }
+  .setting-tog.locked { opacity: .5; cursor: not-allowed; }
+  .setting-tog.locked:hover { border-color: #3a1414; background: var(--panel); }
+  .setting-tog .sn { font-size: 12.5px; font-weight: 600; }
+  .setting-tog .sd { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .setting-tog b { font-size: 10px; letter-spacing: .12em; color: var(--dread); flex-shrink: 0; }
+
+  /* accessibility: reduce flashing/strobing effects */
+  .reduce-flash .menu-title::after { animation: none !important; opacity: 0 !important; }
+  .reduce-flash #deathscreen .story-text { animation: none !important; }
+  .reduce-flash .app.flicker { animation: none !important; }
   .menu-slot { display: flex; gap: 8px; }
   .menu-slot-main {
     flex: 1; text-align: left; padding: 13px 16px; border-radius: 8px;
@@ -671,6 +694,7 @@
   <div class="menu-sidetabs">
     <button class="menu-sidetab" id="opensaves">SAVES</button>
     <button class="menu-sidetab" id="openachs">ACHIEVEMENTS</button>
+    <button class="menu-sidetab" id="opensettings">SETTINGS</button>
   </div>
 
   <div class="menu-panel" id="savespanel">
@@ -687,6 +711,14 @@
       <button class="menu-panel-close" data-close>&times;</button>
     </div>
     <div class="menu-achs ach-grid" id="menuachs"></div>
+  </div>
+
+  <div class="menu-panel" id="settingspanel">
+    <div class="menu-panel-head">
+      <div class="menu-panel-title">SETTINGS</div>
+      <button class="menu-panel-close" data-close>&times;</button>
+    </div>
+    <div class="menu-settings" id="menusettings"></div>
   </div>
 </div>
 
@@ -1060,19 +1092,19 @@ Wherever the signal was going, you're already there.
     { id: 'try_hard', name: 'Try Hard', d: 'Complete the game without dying.',
       c: function (S) { return S.finished && S.contacts === 0; } },
     { id: 'the_tryhard', name: 'THE TRYHARD', d: 'Complete the game without taking a single scar.',
-      c: function (S) { return S.finished && S.scars === 0; } },
+      hidden: true, c: function (S) { return S.finished && S.scars === 0; } },
     { id: 'not_cut_out', name: 'You’re Not Cut Out For This', d: 'Die before level 5.',
       c: function (S) { return S.diedBelow5; } },
     { id: 'depths_caught_you', name: 'The Depths Caught You First', d: 'Die at level 199.',
-      c: function (S) { return S.diedAt199; } },
+      hidden: true, c: function (S) { return S.diedAt199; } },
     { id: 'middle_class', name: 'Middle Class', d: 'Reach 1,000,000 signal.',
       c: function (S) { return S.total >= 1e6; } },
     { id: 'rich', name: 'Rich', d: 'Reach 1,000,000,000 signal.',
       c: function (S) { return S.total >= 1e9; } },
     { id: 'elon_musk', name: 'Elon Musk', d: 'Reach 999,000,000,000 signal.',
-      c: function (S) { return S.total >= 999e9; } },
+      hidden: true, c: function (S) { return S.total >= 999e9; } },
     { id: 'trillionaire', name: 'Trillionaire', d: 'Reach 1,000,000,000,000 signal.',
-      c: function (S) { return S.total >= 1e12; } },
+      hidden: true, c: function (S) { return S.total >= 1e12; } },
     { id: 'halfway', name: 'Halfway There', d: 'Reach level 100.',
       c: function (S) { return S.level >= 100; } }
   ];
@@ -1536,6 +1568,7 @@ Wherever the signal was going, you're already there.
   }
 
   function shake() {
+    if (SETTINGS.reduceShake) return;
     const a = $('app');
     a.classList.remove('shake');
     void a.offsetWidth;
@@ -2877,6 +2910,28 @@ Wherever the signal was going, you're already there.
     if (S.level < 5) S.diedBelow5 = true;
     if (S.level === 199) S.diedAt199 = true;
     checkMetaAchs();
+
+    if (SETTINGS.hardcore && !DEV.godMode) {
+      try { localStorage.removeItem(slotKey(currentSlot)); } catch (e) {}
+      openEncounter({
+        glyph: '💀', kicker: 'HARDCORE', title: 'It Reaches The Middle',
+        dreadful: true,
+        text: 'Hardcore mode. There is no scar tissue to keep this time — only silence, ' +
+              'and a station somebody else will have to reopen from nothing.',
+        options: [{ label: 'Understood', run: function () {
+          S = blank();
+          FX = []; frenzyUntil = 0; darkUntil = 0; darkCooldown = 0;
+          recompute();
+          buildGens();
+          refreshLists();
+          log('Slot ' + currentSlot + ' wiped. Hardcore mode does not forgive.', 'bad');
+        } }]
+      });
+      blip(55, 1.2, 'sawtooth', 0.1);
+      shake();
+      return;
+    }
+
     // your first one is gentler — the rest are not
     const share = DEV.godMode ? 0 : (S.contacts === 0 ? 0.25 : 0.5);
     S.contacts++;
@@ -3717,7 +3772,7 @@ Wherever the signal was going, you're already there.
     if (DEV.infSignal) { S.signal = 1e50; }
 
     // headline numbers
-    const glitch = S.dread > 70 && Math.random() < 0.006;
+    const glitch = !SETTINGS.reduceFlash && S.dread > 70 && Math.random() < 0.006;
     $('signal').textContent = glitch ? pick(['?????', 'ᛁᛚᛚ', '███', 'YOU']) : fmt(S.signal);
     $('rate').textContent = fmt(ps) + ' /sec' + (frenzyMul() > 1 ? '  ⚡×7' : '');
     $('clickval').textContent = fmt(clickValue());
@@ -3732,7 +3787,7 @@ Wherever the signal was going, you're already there.
 
     // animated static, a few times a second
     staticTimer += dt;
-    if (staticTimer >= 90 && S.dread >= 45) { staticTimer = 0; drawStatic(); }
+    if (staticTimer >= 90 && S.dread >= 45 && !SETTINGS.reduceFlash) { staticTimer = 0; drawStatic(); }
 
     // heartbeat when it is close
     if (S.dread >= 80) {
@@ -3943,11 +3998,64 @@ Wherever the signal was going, you're already there.
     const host = $('menuachs');
     host.innerHTML = '';
     META_ACHS.forEach(function (a) {
+      const got = !!metaUnlocked[a.id];
+      const censored = a.hidden && !got;
       const d = document.createElement('div');
-      d.className = 'ach' + (metaUnlocked[a.id] ? ' got' : '');
-      d.innerHTML = '<div class="n">' + (metaUnlocked[a.id] ? '★ ' : '☆ ') + a.name + '</div>' +
-                    '<div class="d">' + a.d + '</div>';
+      d.className = 'ach' + (got ? ' got' : '');
+      d.innerHTML = '<div class="n">' + (got ? '★ ' : '☆ ') + (censored ? '#### #####' : a.name) + '</div>' +
+                    '<div class="d">' + (censored ? 'Hidden achievement — keep playing to find out.' : a.d) + '</div>';
       host.appendChild(d);
+    });
+  }
+
+  // ============================================================== settings
+
+  const SETTINGS_KEY = SAVE_KEY + '.settings';
+  let SETTINGS = { hardcore: false, reduceFlash: false, reduceShake: false };
+
+  const SETTING_DEFS = [
+    { id: 'hardcore', name: 'Hardcore Mode', d: 'Contact wipes the current slot instead of leaving a scar.' },
+    { id: 'reduceFlash', name: 'Reduce Flashing', d: 'Turns off screen flicker and glitch effects.' },
+    { id: 'reduceShake', name: 'Reduce Screen Shake', d: 'Turns off the camera-shake on bad events.' }
+  ];
+
+  function loadSettings() {
+    try {
+      const raw = localStorage.getItem(SETTINGS_KEY);
+      if (raw) SETTINGS = Object.assign(SETTINGS, JSON.parse(raw));
+    } catch (e) {}
+    applySettings();
+  }
+
+  function saveSettings() {
+    try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(SETTINGS)); } catch (e) {}
+  }
+
+  function applySettings() {
+    document.body.classList.toggle('reduce-flash', !!SETTINGS.reduceFlash);
+  }
+
+  function buildMenuSettings() {
+    const host = $('menusettings');
+    host.innerHTML = '';
+    // hardcore is a post-game reward — locked until Good Ending is unlocked
+    const hardcoreLocked = !metaUnlocked.good_ending;
+    SETTING_DEFS.forEach(function (def) {
+      const locked = def.id === 'hardcore' && hardcoreLocked;
+      const b = document.createElement('button');
+      b.className = 'setting-tog' + (SETTINGS[def.id] ? ' on' : '') + (locked ? ' locked' : '');
+      const desc = locked ? 'Locked — complete the game once to unlock this.' : def.d;
+      b.innerHTML = '<div><div class="sn">' + def.name + '</div><div class="sd">' + desc + '</div></div>' +
+                    '<b>' + (locked ? '🔒' : (SETTINGS[def.id] ? 'ON' : 'OFF')) + '</b>';
+      if (!locked) {
+        b.addEventListener('click', function () {
+          SETTINGS[def.id] = !SETTINGS[def.id];
+          saveSettings();
+          applySettings();
+          buildMenuSettings();
+        });
+      }
+      host.appendChild(b);
     });
   }
 
@@ -4150,14 +4258,17 @@ Wherever the signal was going, you're already there.
   function openMenuPanel(id) {
     $('savespanel').classList.toggle('on', id === 'saves');
     $('achspanel').classList.toggle('on', id === 'achs');
+    $('settingspanel').classList.toggle('on', id === 'settings');
   }
   function closeMenuPanels() {
     $('savespanel').classList.remove('on');
     $('achspanel').classList.remove('on');
+    $('settingspanel').classList.remove('on');
   }
 
   $('opensaves').addEventListener('click', function () { openMenuPanel('saves'); });
   $('openachs').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
+  $('opensettings').addEventListener('click', function () { buildMenuSettings(); openMenuPanel('settings'); });
   $('menuplay').addEventListener('click', function () { openMenuPanel('saves'); });
   $('menuachbtn').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
   Array.prototype.forEach.call(document.querySelectorAll('.menu-panel-close'), function (b) {
@@ -4179,6 +4290,7 @@ Wherever the signal was going, you're already there.
   function showMenu() {
     migrateLegacySave();
     loadMetaAchs();
+    loadSettings();
     buildMenu();
     buildMenuAchs();
     $('menuscreen').classList.add('on');
