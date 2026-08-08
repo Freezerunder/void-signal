@@ -380,25 +380,23 @@
   .menu-title {
     position: relative; font-size: 40px; letter-spacing: .34em; font-weight: 600;
     color: var(--dread); text-transform: uppercase;
-    animation: titleflick 1.7s steps(1) infinite;
   }
   .menu-title::after {
     content: attr(data-text);
     position: absolute; inset: 0; color: #fff;
+    clip-path: inset(0 0 0 52%);
     text-shadow: -2px 0 var(--accent), 2px 0 var(--dread);
-    animation: titleghost 1.7s steps(1) infinite;
+    animation: titleglitch 2.3s steps(1) infinite;
   }
-  @keyframes titleflick {
-    0%, 100% { opacity: 1; }
-    3% { opacity: .2; } 5% { opacity: .95; } 7% { opacity: .1; } 9% { opacity: 1; }
-    38% { opacity: 1; } 40% { opacity: .3; } 42% { opacity: 1; }
-    68% { opacity: 1; } 70% { opacity: .15; } 72% { opacity: .8; } 74% { opacity: 1; }
-  }
-  @keyframes titleghost {
-    0%, 100% { opacity: 0; }
-    3% { opacity: .65; } 5% { opacity: 0; } 7% { opacity: .8; } 9% { opacity: 0; }
-    40% { opacity: .55; } 42% { opacity: 0; }
-    70% { opacity: .7; } 72% { opacity: 0; }
+  @keyframes titleglitch {
+    0%, 74%, 100% { opacity: 0; transform: translate(0,0); clip-path: inset(0 0 0 52%); }
+    75% { opacity: .85; transform: translate(-3px, 1px); clip-path: inset(0 0 0 52%); }
+    77% { opacity: .15; transform: translate(2px,-1px); clip-path: inset(0 0 0 40%); }
+    80% { opacity: .9; transform: translate(-2px, 0); clip-path: inset(0 0 0 58%); }
+    82% { opacity: 0; }
+    91% { opacity: 0; }
+    92% { opacity: .6; transform: translate(3px,0); clip-path: inset(0 0 0 46%); }
+    94% { opacity: 0; }
   }
   .menu-sub {
     font-size: 11px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase;
@@ -413,6 +411,14 @@
     cursor: pointer;
   }
   .menu-play:hover { background: #1d0e0e; box-shadow: 0 0 26px rgba(194,69,63,.4); }
+  .menu-achbtn {
+    position: absolute; left: 50%; top: 71.5%; transform: translate(-50%, -50%);
+    z-index: 1; padding: 8px 22px; border-radius: 7px;
+    background: transparent; border: 1px solid var(--line); color: var(--muted);
+    font-family: inherit; font-size: 10.5px; letter-spacing: .24em; text-transform: uppercase;
+    cursor: pointer;
+  }
+  .menu-achbtn:hover { color: #fff; border-color: var(--dread); }
 
   .menu-sidetabs {
     position: absolute; right: 18px; top: 50%; transform: translateY(-50%);
@@ -660,6 +666,7 @@
   </div>
 
   <button class="menu-play" id="menuplay">PLAY</button>
+  <button class="menu-achbtn" id="menuachbtn">ACHIEVEMENTS</button>
 
   <div class="menu-sidetabs">
     <button class="menu-sidetab" id="opensaves">SAVES</button>
@@ -3828,16 +3835,25 @@ Wherever the signal was going, you're already there.
       const glowT = Math.min(1, t / 5.5);                           // light grows in, maxed ~5.5s
       const riseT = Math.max(0, Math.min(1, (t - 2.4) / 6));        // the spark's ascent
 
+      const gy = baseY - riseT * canvas.height * 0.7;
+      // how "gettable" the ball currently is — 0 while it's still forming,
+      // peaks while it's mid-climb, back to 0 once it's pulled clear
+      const reachable = Math.sin(Math.PI * Math.min(Math.max(riseT, 0), 1));
+
       ctx.lineCap = 'round';
       tendrils.forEach(function (tn) {
-        const h = tn.len * (0.3 + 0.7 * dark);
+        const distToBall = Math.abs(tn.x - cx);
+        const lunge = Math.pow(Math.max(0, Math.sin(t * 1.1 + tn.phase * 2)), 8);
+        const reach = lunge * reachable * dark * Math.max(0, 1 - distToBall / (canvas.width * 0.35));
+        const h = tn.len * (0.3 + 0.7 * dark) + reach * canvas.height * 0.32;
         const sway = tn.sway * dark;
         const midx = tn.x + Math.sin(t * tn.speed + tn.phase) * sway;
-        const tipx = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3;
+        const tipx = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3 +
+                     reach * (cx - tn.x) * 0.5;
         const by = canvas.height + 20;
         const midY = by - h * 0.55;
         const tipY = by - h;
-        ctx.strokeStyle = 'rgba(10,8,14,' + (0.42 * dark).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(10,8,14,' + (0.42 * dark + 0.3 * reach).toFixed(3) + ')';
         ctx.lineWidth = tn.width * (0.35 + 0.65 * dark);
         ctx.beginPath();
         ctx.moveTo(tn.x, by);
@@ -3846,7 +3862,6 @@ Wherever the signal was going, you're already there.
       });
 
       const glowR = canvas.height * (0.05 + 0.5 * glowT);
-      const gy = baseY - riseT * canvas.height * 0.7;
       const grad = ctx.createRadialGradient(cx, gy, 0, cx, gy, glowR);
       grad.addColorStop(0, 'rgba(255,250,235,' + (0.85 * glowT).toFixed(3) + ')');
       grad.addColorStop(0.4, 'rgba(255,229,164,' + (0.45 * glowT).toFixed(3) + ')');
@@ -3858,18 +3873,24 @@ Wherever the signal was going, you're already there.
         trail.push({ x: cx + Math.sin(t * 0.8) * 12, y: gy });
         if (trail.length > 24) trail.shift();
         trail.forEach(function (p, i) {
-          const a = (i / trail.length) * 0.45;
+          const a = (i / trail.length) * 0.55;
           ctx.beginPath();
           ctx.fillStyle = 'rgba(255,244,214,' + a.toFixed(3) + ')';
-          ctx.arc(p.x, p.y, 3 + a * 6, 0, Math.PI * 2);
+          ctx.arc(p.x, p.y, 4 + a * 8, 0, Math.PI * 2);
           ctx.fill();
         });
         const head = trail[trail.length - 1];
+        // soft outer halo, then a bigger, brighter solid core
+        ctx.beginPath();
+        ctx.fillStyle = 'rgba(255,244,214,0.35)';
+        ctx.shadowColor = 'rgba(255,244,214,0.9)';
+        ctx.shadowBlur = 34;
+        ctx.arc(head.x, head.y, 16, 0, Math.PI * 2);
+        ctx.fill();
         ctx.beginPath();
         ctx.fillStyle = '#fffaf0';
-        ctx.shadowColor = 'rgba(255,244,214,0.9)';
-        ctx.shadowBlur = 22;
-        ctx.arc(head.x, head.y, 5, 0, Math.PI * 2);
+        ctx.shadowBlur = 30;
+        ctx.arc(head.x, head.y, 9, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
@@ -3955,17 +3976,23 @@ Wherever the signal was going, you're already there.
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
+    const glowX = canvas.width * 0.5;
+    const glowY = canvas.height * 0.46;
+    const glowBaseR = Math.min(canvas.width, canvas.height) * 0.055;
+
     const n = 9;
     const tendrils = [];
     for (let i = 0; i < n; i++) {
+      const x = canvas.width * (0.05 + 0.9 * (i / (n - 1))) + (Math.random() - 0.5) * 40;
       tendrils.push({
-        x: canvas.width * (0.05 + 0.9 * (i / (n - 1))) + (Math.random() - 0.5) * 40,
+        x: x,
         base: canvas.height * (0.2 + Math.random() * 0.16),
         riseSpeed: 0.16 + Math.random() * 0.12,
         phase: Math.random() * Math.PI * 2,
         sway: 18 + Math.random() * 28,
         swaySpeed: 0.35 + Math.random() * 0.3,
-        width: 8 + Math.random() * 8
+        width: 8 + Math.random() * 8,
+        distToCenter: Math.abs(x - glowX)
       });
     }
 
@@ -3997,19 +4024,35 @@ Wherever the signal was going, you're already there.
       ctx.lineCap = 'round';
       tendrils.forEach(function (tn) {
         const rise = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(t * tn.riseSpeed + tn.phase));
-        const h = tn.base * rise;
+        // an occasional sharp lunge toward the light, strongest for tendrils
+        // already near center — it never quite reaches before receding.
+        const lunge = Math.pow(Math.max(0, Math.sin(t * 0.22 + tn.phase * 1.7)), 10);
+        const reach = lunge * Math.max(0, 1 - tn.distToCenter / (canvas.width * 0.3));
+        const h = tn.base * rise + reach * canvas.height * 0.2;
         const midx = tn.x + Math.sin(t * tn.swaySpeed + tn.phase) * tn.sway;
-        const tipx = tn.x + Math.sin(t * tn.swaySpeed * 0.7 + tn.phase + 1) * tn.sway * 1.3;
+        const tipx = tn.x + Math.sin(t * tn.swaySpeed * 0.7 + tn.phase + 1) * tn.sway * 1.3 +
+                     reach * (glowX - tn.x) * 0.45;
         const by = canvas.height + 20;
         const midY = by - h * 0.55;
         const tipY = by - h;
-        ctx.strokeStyle = 'rgba(10,8,14,' + (0.15 + 0.4 * rise).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(10,8,14,' + (0.15 + 0.4 * rise + 0.25 * reach).toFixed(3) + ')';
         ctx.lineWidth = tn.width * (0.5 + 0.5 * rise);
         ctx.beginPath();
         ctx.moveTo(tn.x, by);
         ctx.quadraticCurveTo(midx, midY, tipx, tipY);
         ctx.stroke();
       });
+
+      const glowPulse = 0.78 + 0.22 * Math.sin(t * 0.9);
+      const gRadius = glowBaseR * glowPulse * 1.6;
+      const glow = ctx.createRadialGradient(glowX, glowY, 0, glowX, glowY, gRadius);
+      glow.addColorStop(0, 'rgba(255,250,240,0.85)');
+      glow.addColorStop(0.5, 'rgba(255,240,210,0.32)');
+      glow.addColorStop(1, 'rgba(255,240,210,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath();
+      ctx.arc(glowX, glowY, gRadius, 0, Math.PI * 2);
+      ctx.fill();
 
       sparkTimer += dt;
       if (sparkTimer > 0.35) { sparkTimer = 0; if (sparks.length < 26) spawnSpark(); }
@@ -4093,6 +4136,7 @@ Wherever the signal was going, you're already there.
   $('opensaves').addEventListener('click', function () { openMenuPanel('saves'); });
   $('openachs').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
   $('menuplay').addEventListener('click', function () { openMenuPanel('saves'); });
+  $('menuachbtn').addEventListener('click', function () { buildMenuAchs(); openMenuPanel('achs'); });
   Array.prototype.forEach.call(document.querySelectorAll('.menu-panel-close'), function (b) {
     b.addEventListener('click', closeMenuPanels);
   });
