@@ -1044,11 +1044,11 @@
     return Math.max(0, Math.min(1, (S.total - a) / (b - a)));
   }
 
-  // Going dark is the strongest tool in the game, so it always costs
-  // something — a price that rises with your level, from day one.
+  // Going dark is the strongest tool in the game, so it starts out of reach
+  // and only becomes affordable once production has ramped up.
   function darkCost() {
     if (DEV.freeDark) return 0;
-    return Math.max(125, levelReq(S.level) * 0.04 * mods.darkCost);
+    return (1000 + levelReq(S.level) * 0.07) * mods.darkCost;
   }
   function canAffordDark() { return DEV.infSignal || S.signal >= darkCost(); }
 
@@ -3331,7 +3331,7 @@
 
     // dread: the louder you are, the faster it finds you
     if (isDark()) {
-      addDread(-4 * mods.darkRate * sec);
+      addDread(-2.5 * mods.darkRate * sec);
     } else if (noticed() && !DEV.noDread) {
       // Loudness drives dread, but the log is capped so late-game production
       // doesn't make Contact inevitable every couple of minutes.
