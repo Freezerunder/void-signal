@@ -3123,6 +3123,7 @@ Wherever the signal was going, you're already there.
           buildGens();
           refreshLists();
           log('Slot ' + currentSlot + ' wiped. Hardcore mode does not forgive.', 'bad');
+          gameRunning = false;
           showMenu();
         } }]
       });
@@ -3875,6 +3876,7 @@ Wherever the signal was going, you're already there.
             buildGens();
             refreshLists();
             log('Station reinitialised. The dark is still out there, and it remembers you.');
+            gameRunning = false;
             showMenu();
           } },
         { label: 'Keep playing', run: function () {} }
@@ -3910,8 +3912,13 @@ Wherever the signal was going, you're already there.
   // =================================================================== loop
 
   let last = 0, listTimer = 0, saveTimer = 0, titleTimer = 0, heartTimer = 0;
+  // Set false when a wipe sends the player back to the title menu, so the
+  // loop underneath — dread, contact(), the 10s autosave — actually stops
+  // instead of quietly resurrecting the save it just erased.
+  let gameRunning = true;
 
   function frame(now) {
+    if (!gameRunning) return;
     if (!last) last = now;
     const dt = Math.min(now - last, 1000);
     last = now;
@@ -4068,7 +4075,6 @@ Wherever the signal was going, you're already there.
   const WIN_T_RISE = 3.4;
   const WIN_TEXT_DELAY_MS = (WIN_T_BLACK + WIN_T_FALL + WIN_T_PULL + WIN_T_HOLD + WIN_T_GRAB + WIN_T_RISE + 0.6) * 1000;
 
-  function easeInOutCubic(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
   function easeOutCubic(k) { return 1 - Math.pow(1 - k, 3); }
 
   // Draws one tentacle as a tapered, textured shape instead of a single
@@ -4187,11 +4193,15 @@ Wherever the signal was going, you're already there.
         orbY = topY;
       } else if (t < tLand) {
         const k = Math.min(1, (t - tFall) / WIN_T_FALL);
-        orbY = topY + easeInOutCubic(k) * (lowY - topY);           // eased fall — decelerates into landing instead of stopping dead
+        orbY = topY + (k * k) * (lowY - topY);                     // real gravity — accelerates the whole way, no floaty ease-out
       } else if (t < tPullEnd) {
+        // momentum carries it past lowY at speed — tendrils catch it mid-fall
+        // and reel it the rest of the way down, decelerating smoothly into
+        // the struggle instead of the fall just stopping dead at lowY.
         const k = Math.min(1, (t - tLand) / WIN_T_PULL);
-        const wobble = Math.sin(t * 10) * 4 * (1 - k);             // resisting at first, settling as the grip wins
-        orbY = lowY + (k * k) * (pullY - lowY) + wobble;           // tendrils hauling it down deeper
+        const e = easeOutCubic(k);
+        const wobble = Math.sin(t * 10) * 4 * (1 - e);             // resisting at first, settling as the grip wins
+        orbY = lowY + e * (pullY - lowY) + wobble;
       } else if (t < tGrabStart) {
         orbY = pullY + Math.sin(t * 9) * 3;                        // fully gripped, struggling at the bottom
       } else if (t < tGrabEnd) {
@@ -4237,15 +4247,21 @@ Wherever the signal was going, you're already there.
         const proximity = Math.max(0, 1 - distToBall / (canvas.width * 0.45));
         const lunge = Math.pow(Math.max(0, Math.sin(t * 1.1 + tn.phase * 2)), 6);
 
-        // target grip: during the pull phase, tendrils that are close
-        // enough clamp onto a firm hold instead of just lunging on a
-        // timer, so dragging the spark down reads as a deliberate haul.
+        // target grip: nearness already climbs during the last part of the
+        // fall (it's just a function of orbY), so tendrils start reaching
+        // before it even lands — no separate "wait for landing" gate needed.
+        // During the pull phase, close tendrils clamp onto a firm hold
+        // instead of just lunging on a timer, so the drag down reads as a
+        // deliberate haul rather than random twitching.
         let targetReach;
-        if (t < tLand) {
-          targetReach = 0;
-        } else if (t < tPullEnd) {
-          const gripK = Math.min(1, (t - tLand) / WIN_T_PULL);
-          targetReach = Math.max(lunge * nearness * proximity, proximity > 0.5 ? gripK * proximity : 0);
+        if (t < tPullEnd) {
+          const ambient = lunge * nearness * proximity;
+          if (t < tLand) {
+            targetReach = ambient;
+          } else {
+            const gripK = Math.min(1, (t - tLand) / WIN_T_PULL);
+            targetReach = Math.max(ambient, proximity > 0.5 ? gripK * proximity : 0);
+          }
         } else {
           targetReach = Math.max(lunge, t < tGrabEnd ? 0.45 : 0) * nearness * proximity;
         }
@@ -4882,6 +4898,7 @@ Wherever the signal was going, you're already there.
 
     window.addEventListener('beforeunload', function () { save(true); });
 
+    gameRunning = true;
     showIntro();
     requestAnimationFrame(frame);
   }
