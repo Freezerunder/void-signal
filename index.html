@@ -407,6 +407,14 @@
     margin-top: -6px;
   }
 
+  .menu-status {
+    position: absolute; left: 50%; top: 49%; transform: translate(-50%, -50%);
+    z-index: 1; font-size: 11px; letter-spacing: .18em; color: var(--accent);
+    text-transform: uppercase; opacity: .55; transition: opacity 1.1s ease;
+    pointer-events: none; white-space: nowrap;
+  }
+  .menu-status.dim { opacity: 0; }
+
   .menu-play {
     position: absolute; left: 50%; top: 63%; transform: translate(-50%, -50%);
     z-index: 1; padding: 13px 50px; border-radius: 8px;
@@ -707,6 +715,8 @@
     <div class="menu-title" data-text="VOID SIGNAL">VOID SIGNAL</div>
     <div class="menu-sub">DERELICT LISTENING STATION · SECTOR 9</div>
   </div>
+
+  <div class="menu-status" id="menustatus">LISTENING…</div>
 
   <button class="menu-play" id="menuplay">PLAY</button>
 
@@ -1516,9 +1526,24 @@ Wherever the signal was going, you're already there.
     try { ambientGain.gain.setTargetAtTime(target, audio.currentTime, 4); } catch (e) {}
   }
 
-  // A warm, original ambient piece for the ending — ducks the dread drone
-  // and horror bed out, swells in a slow major pad, and drifts through a
-  // sparse arpeggio. Not a cover of anything, just built in that spirit.
+  // A warm, original ambient piece for the ending, in the spirit of a slow
+  // filtered dream-house swell (think Innerbloom-adjacent, not a cover of
+  // it) — ducks the dread drone and horror bed out, breathes through a
+  // slowly sweeping lowpass filter, carries a felt-more-than-heard sub
+  // pulse underneath, and lets a sparse arpeggio trail off into its own
+  // feedback delay instead of playing dry.
+  const HEAVENLY_PAD_TARGET = 0.26;
+  const HEAVENLY_SUB_TARGET = 0.1;
+  const HEAVENLY_ECHO_TARGET = 0.5;
+
+  function updateHeavenlyLevels() {
+    if (!heavenly) return;
+    const on = !S.muted;
+    try { heavenly.padGain.gain.setTargetAtTime(on ? HEAVENLY_PAD_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
+    try { heavenly.subGain.gain.setTargetAtTime(on ? HEAVENLY_SUB_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
+    try { heavenly.echoOut.gain.setTargetAtTime(on ? HEAVENLY_ECHO_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
+  }
+
   function playHeavenlyMusic() {
     ensureAudio();
     if (!audio) return;
@@ -1526,29 +1551,77 @@ Wherever the signal was going, you're already there.
     try { droneGain.gain.setTargetAtTime(0, audio.currentTime, 2); } catch (e) {}
     try { ambientGain.gain.setTargetAtTime(0, audio.currentTime, 2); } catch (e) {}
 
+    // slow-sweeping shared filter on the whole pad — the warm, breathing
+    // "analog synth opening up" character rather than a static chord.
+    const padFilt = audio.createBiquadFilter();
+    padFilt.type = 'lowpass';
+    padFilt.frequency.value = 650;
+    padFilt.Q.value = 0.6;
+    const filtLfo = audio.createOscillator(), filtLfoGain = audio.createGain();
+    filtLfo.type = 'sine';
+    filtLfo.frequency.value = 0.045; // ~22s sweep, slow enough to feel like breathing
+    filtLfoGain.gain.value = 420;
+    filtLfo.connect(filtLfoGain); filtLfoGain.connect(padFilt.frequency);
+    filtLfo.start();
+
     const padGain = audio.createGain();
     padGain.gain.value = 0;
-    padGain.connect(audio.destination);
-    const chord = [130.81, 164.81, 196.00, 261.63, 329.63]; // C E G C E, spread wide and warm
+    padGain.connect(padFilt); padFilt.connect(audio.destination);
+
+    const chord = [130.81, 164.81, 196.00, 261.63, 329.63, 392.00]; // C E G C E G, wide and warm
     const oscs = chord.map(function (freq) {
       const o = audio.createOscillator(), g = audio.createGain(), filt = audio.createBiquadFilter();
-      o.type = 'sine'; o.frequency.value = freq;
-      filt.type = 'lowpass'; filt.frequency.value = 1100;
-      g.gain.value = 0.22;
+      o.type = 'sine';
+      o.frequency.value = freq * (1 + (Math.random() - 0.5) * 0.004); // faint per-voice detune, chorus-like warmth
+      filt.type = 'lowpass'; filt.frequency.value = 1400;
+      g.gain.value = 0.2;
       o.connect(filt); filt.connect(g); g.connect(padGain);
       o.start();
       return o;
     });
-    if (!S.muted) padGain.gain.setTargetAtTime(0.22 * SETTINGS.volume, audio.currentTime, 3.5);
+    if (!S.muted) padGain.gain.setTargetAtTime(HEAVENLY_PAD_TARGET * SETTINGS.volume, audio.currentTime, 4.5);
 
-    const arpNotes = [523.25, 659.25, 784.00, 987.77, 784.00, 659.25]; // C E G B G E
+    // a sub pulse, low enough to feel rather than hear — gives the pad weight
+    const sub = audio.createOscillator(), subGain = audio.createGain();
+    sub.type = 'sine'; sub.frequency.value = 65.41; // C2
+    subGain.gain.value = 0;
+    sub.connect(subGain); subGain.connect(audio.destination);
+    sub.start();
+    if (!S.muted) subGain.gain.setTargetAtTime(HEAVENLY_SUB_TARGET * SETTINGS.volume, audio.currentTime, 5);
+
+    // a feedback delay bus just for the arpeggio, so notes trail off into a
+    // hazy echo instead of playing dry against the pad
+    const delay = audio.createDelay(2.0);
+    delay.delayTime.value = 0.42;
+    const feedback = audio.createGain();
+    feedback.gain.value = 0.42;
+    const echoFilt = audio.createBiquadFilter();
+    echoFilt.type = 'lowpass'; echoFilt.frequency.value = 2200;
+    const echoOut = audio.createGain();
+    echoOut.gain.value = S.muted ? 0 : HEAVENLY_ECHO_TARGET * SETTINGS.volume;
+    delay.connect(feedback); feedback.connect(echoFilt); echoFilt.connect(delay);
+    delay.connect(echoOut); echoOut.connect(audio.destination);
+
+    const arpNotes = [523.25, 659.25, 784.00, 987.77, 784.00, 659.25, 1046.5, 784.00]; // C E G B G E C B
     let ai = 0;
     const arpTimer = setInterval(function () {
-      blip(arpNotes[ai % arpNotes.length], 1.8, 'sine', 0.035);
+      const freq = arpNotes[ai % arpNotes.length];
       ai++;
-    }, 1400);
+      if (S.muted) return;
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      g.gain.setValueAtTime(0.0001, audio.currentTime);
+      g.gain.linearRampToValueAtTime(0.05 * SETTINGS.volume, audio.currentTime + 0.4);
+      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2.2);
+      o.connect(g); g.connect(audio.destination); g.connect(delay);
+      o.start(); o.stop(audio.currentTime + 2.3);
+    }, 1800);
 
-    heavenly = { padGain: padGain, oscs: oscs, arpTimer: arpTimer };
+    heavenly = {
+      padGain: padGain, oscs: oscs, arpTimer: arpTimer,
+      filtLfo: filtLfo, sub: sub, subGain: subGain,
+      delay: delay, feedback: feedback, echoOut: echoOut
+    };
   }
 
   function stopHeavenlyMusic() {
@@ -1558,7 +1631,13 @@ Wherever the signal was going, you're already there.
     clearInterval(h.arpTimer);
     try {
       h.padGain.gain.setTargetAtTime(0, audio.currentTime, 2);
-      setTimeout(function () { h.oscs.forEach(function (o) { try { o.stop(); } catch (e) {} }); }, 3000);
+      h.subGain.gain.setTargetAtTime(0, audio.currentTime, 2);
+      h.echoOut.gain.setTargetAtTime(0, audio.currentTime, 2);
+      setTimeout(function () {
+        h.oscs.forEach(function (o) { try { o.stop(); } catch (e) {} });
+        try { h.filtLfo.stop(); } catch (e) {}
+        try { h.sub.stop(); } catch (e) {}
+      }, 3000);
     } catch (e) {}
     updateDrone();
     updateAmbient();
@@ -3773,9 +3852,7 @@ Wherever the signal was going, you're already there.
     $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
     updateDrone();
     updateAmbient();
-    if (heavenly) {
-      try { heavenly.padGain.gain.setTargetAtTime(S.muted ? 0 : 0.16, audio.currentTime, 1.5); } catch (e) {}
-    }
+    updateHeavenlyLevels();
     if (!S.muted) blip(660, 0.08);
   });
 
@@ -3986,17 +4063,25 @@ Wherever the signal was going, you're already there.
       tendrils.forEach(function (tn) {
         const distToBall = Math.abs(tn.x - cx);
         const lunge = Math.pow(Math.max(0, Math.sin(t * 1.1 + tn.phase * 2)), 8);
-        const reach = lunge * reachable * dark * Math.max(0, 1 - distToBall / (canvas.width * 0.35));
-        const h = tn.len * (0.3 + 0.7 * dark) + reach * canvas.height * 0.32;
+        // reach is deliberately not scaled by `dark` — a tendril should still
+        // be able to make one last full-stretch grab as the darkness fades,
+        // rather than losing its reach right when the ball is most gettable.
+        const reach = lunge * reachable * Math.max(0, 1 - distToBall / (canvas.width * 0.45));
+        const restH = tn.len * (0.3 + 0.7 * dark);
         const sway = tn.sway * dark;
-        const midx = tn.x + Math.sin(t * tn.speed + tn.phase) * sway;
-        const tipx = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3 +
-                     reach * (cx - tn.x) * 0.5;
+        const midx = tn.x + Math.sin(t * tn.speed + tn.phase) * sway * (1 - reach * 0.6);
+        const wobbleTipX = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3;
+        // tip and mid both ease fully toward the ball's actual position as
+        // reach climbs, so at peak lunge the tendril tip genuinely arrives
+        // at (cx, gy) instead of stopping partway there.
+        const tipx = wobbleTipX + (cx - wobbleTipX) * reach;
         const by = canvas.height + 20;
-        const midY = by - h * 0.55;
-        const tipY = by - h;
-        ctx.strokeStyle = 'rgba(10,8,14,' + (0.42 * dark + 0.3 * reach).toFixed(3) + ')';
-        ctx.lineWidth = tn.width * (0.35 + 0.65 * dark);
+        const restTipY = by - restH;
+        const restMidY = by - restH * 0.55;
+        const tipY = restTipY + (gy - restTipY) * reach;
+        const midY = restMidY + (gy - restMidY) * reach * 0.7;
+        ctx.strokeStyle = 'rgba(10,8,14,' + (0.42 * dark + 0.4 * reach).toFixed(3) + ')';
+        ctx.lineWidth = tn.width * (0.35 + 0.65 * dark + 0.3 * reach);
         ctx.beginPath();
         ctx.moveTo(tn.x, by);
         ctx.quadraticCurveTo(midx, midY, tipx, tipY);
@@ -4146,9 +4231,7 @@ Wherever the signal was going, you're already there.
       saveSettings();
       updateDrone();
       updateAmbient();
-      if (heavenly && !S.muted) {
-        try { heavenly.padGain.gain.setTargetAtTime(0.22 * SETTINGS.volume, audio.currentTime, 0.3); } catch (e) {}
-      }
+      updateHeavenlyLevels();
     });
     $('volslider').addEventListener('change', function () {
       if (!S.muted) blip(660, 0.08);
@@ -4193,6 +4276,34 @@ Wherever the signal was going, you're already there.
   function stopMenuThump() {
     if (menuThumpIv) clearInterval(menuThumpIv);
     menuThumpIv = null;
+  }
+
+  // A slow rotating status line, purely flavor — fills the gap between the
+  // title and the PLAY button without adding any real UI weight.
+  const MENU_STATUS_LINES = [
+    'LISTENING…', 'SIGNAL: DORMANT', 'ARRAY: COLD', 'UPLINK STANDBY',
+    'NO CONTACT LOGGED', 'SECTOR 9 · QUIET', 'CARRIER: NONE DETECTED'
+  ];
+  let menuStatusIv = null;
+
+  function startMenuStatus() {
+    const el = $('menustatus');
+    let i = 0;
+    el.textContent = MENU_STATUS_LINES[0];
+    el.classList.remove('dim');
+    menuStatusIv = setInterval(function () {
+      el.classList.add('dim');
+      setTimeout(function () {
+        i = (i + 1) % MENU_STATUS_LINES.length;
+        el.textContent = MENU_STATUS_LINES[i];
+        el.classList.remove('dim');
+      }, 1100);
+    }, 4600);
+  }
+
+  function stopMenuStatus() {
+    if (menuStatusIv) clearInterval(menuStatusIv);
+    menuStatusIv = null;
   }
 
   // Looping ambient background for the menu: tentacles breathing up and
@@ -4287,7 +4398,7 @@ Wherever the signal was going, you're already there.
         const by = canvas.height + 20;
         const midY = by - h * 0.55;
         const tipY = by - h;
-        ctx.strokeStyle = 'rgba(10,8,14,' + (0.15 + 0.4 * rise + 0.25 * reach).toFixed(3) + ')';
+        ctx.strokeStyle = 'rgba(10,8,14,' + (0.2 + 0.44 * rise + 0.27 * reach).toFixed(3) + ')';
         ctx.lineWidth = tn.width * (0.5 + 0.5 * rise);
         ctx.beginPath();
         ctx.moveTo(tn.x, by);
@@ -4400,6 +4511,7 @@ Wherever the signal was going, you're already there.
     closeMenuPanels();
     stopMenuThump();
     stopMenuFX();
+    stopMenuStatus();
     // Boot while the menu is still fully opaque, so the game UI it builds
     // never gets a chance to show through — only fade the menu away once
     // the intro screen (added by bootGame -> showIntro) is fully in place.
@@ -4420,6 +4532,7 @@ Wherever the signal was going, you're already there.
     }, { once: true });
     startMenuThump();
     startMenuFX();
+    startMenuStatus();
   }
 
   // =================================================================== boot
