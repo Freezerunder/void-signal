@@ -3492,13 +3492,13 @@ Wherever the signal was going, you're already there.
 
     // carrier waves, events, travellers
     if (!nextWave) scheduleWave();
-    if (Date.now() >= nextWave) { spawnWave(); scheduleWave(); }
+    if (S.level >= 5 && Date.now() >= nextWave) { spawnWave(); scheduleWave(); }
 
     if (!nextChest) scheduleChest();
-    if (noticed() && !DEV.noChests && Date.now() >= nextChest) { spawnChest(); scheduleChest(); }
+    if (S.level >= 5 && noticed() && !DEV.noChests && Date.now() >= nextChest) { spawnChest(); scheduleChest(); }
 
     if (!nextWatcher) scheduleWatcher();
-    if (noticed() && !DEV.noWatcher && Date.now() >= nextWatcher) { spawnWatcher(); scheduleWatcher(); }
+    if (S.level >= 5 && noticed() && !DEV.noWatcher && Date.now() >= nextWatcher) { spawnWatcher(); scheduleWatcher(); }
 
     if (!noticed()) {
       // beneath notice: keep pushing the clocks forward so nothing fires
