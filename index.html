@@ -4238,32 +4238,42 @@ Wherever the signal was going, you're already there.
       else if (t < tRiseEnd) handReach = Math.max(0, 1 - ((t - tGrabEnd) / WIN_T_RISE) * 0.85);
       else handReach = Math.max(0, 0.15 - (t - tRiseEnd) * 0.22);
 
-      ctx.fillStyle = 'rgba(0,0,0,' + bgDark.toFixed(3) + ')';
+      // deep indigo, not pure black — the tendrils are dark, so a pure
+      // black backdrop made them invisible instead of silhouetted
+      ctx.fillStyle = 'rgba(9,7,18,' + bgDark.toFixed(3) + ')';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // exactly two tendrils are the ones that actually grab the spark —
+      // picked by rank (nearest to its current x) rather than a distance
+      // threshold, so there's always a clear, visible hook instead of
+      // every tendril half-heartedly lunging and none of them landing it
+      const byDist = tendrils.map(function (tn) { return { tn: tn, d: Math.abs(tn.x - orbX) }; })
+        .sort(function (a, b) { return a.d - b.d; });
+      const grippers = new Set([byDist[0].tn, byDist[1].tn]);
+      const gripOverlay = [];
 
       ctx.lineCap = 'round';
       tendrils.forEach(function (tn) {
         const distToBall = Math.abs(tn.x - orbX);
         const proximity = Math.max(0, 1 - distToBall / (canvas.width * 0.45));
         const lunge = Math.pow(Math.max(0, Math.sin(t * 1.1 + tn.phase * 2)), 6);
+        const isGripper = grippers.has(tn);
 
         // target grip: nearness already climbs during the last part of the
         // fall (it's just a function of orbY), so tendrils start reaching
-        // before it even lands — no separate "wait for landing" gate needed.
-        // During the pull phase, close tendrils clamp onto a firm hold
-        // instead of just lunging on a timer, so the drag down reads as a
-        // deliberate haul rather than random twitching.
+        // before it even lands. Once past landing, the two designated
+        // grippers clamp onto a firm hold that tracks nearness directly
+        // (not the timer-driven lunge) so the drag down reads as a
+        // deliberate haul; everything else just sways in the background.
+        const ambient = lunge * nearness * proximity * 0.55;
         let targetReach;
-        if (t < tPullEnd) {
-          const ambient = lunge * nearness * proximity;
-          if (t < tLand) {
-            targetReach = ambient;
-          } else {
-            const gripK = Math.min(1, (t - tLand) / WIN_T_PULL);
-            targetReach = Math.max(ambient, proximity > 0.5 ? gripK * proximity : 0);
-          }
+        if (t < tLand) {
+          targetReach = ambient;
+        } else if (isGripper) {
+          const gripK = Math.min(1, (t - tLand) / (WIN_T_PULL * 0.6));
+          targetReach = t < tGrabEnd ? Math.max(ambient, gripK * nearness) : ambient;
         } else {
-          targetReach = Math.max(lunge, t < tGrabEnd ? 0.45 : 0) * nearness * proximity;
+          targetReach = ambient;
         }
         // low-pass filter the grip instead of snapping to it directly —
         // this is what makes tendrils ease off gradually as the hand
@@ -4283,17 +4293,29 @@ Wherever the signal was going, you're already there.
         const c2y = by - restH * 0.74;
         const restTipY = by - restH;
 
-        // once gripping hard, the tip curls/wriggles around the spark
-        // instead of just touching it, to sell the "wrapping around it"
-        // motion rather than a stiff line poking at a ball.
+        // the tip approaches the orb's rim, not its center — otherwise it
+        // dives underneath the bright core and the contact point vanishes.
+        // once gripping hard it also curls/wriggles around that rim
+        // instead of just touching it, to read as "wrapped around", not
+        // "poking at."
+        const orbRimR = 14;
+        const toOrbX = orbX - wobbleTipX, toOrbY = orbY - restTipY;
+        const toOrbDist = Math.hypot(toOrbX, toOrbY) || 1;
+        const rimX = orbX - (toOrbX / toOrbDist) * orbRimR;
+        const rimY = orbY - (toOrbY / toOrbDist) * orbRimR;
         const wrapAmt = Math.max(0, reach - 0.45) / 0.55;
         const wrapAngle = t * 4.2 + tn.curlPhase;
-        const tipX = wobbleTipX + (orbX - wobbleTipX) * reach + Math.cos(wrapAngle) * 9 * wrapAmt;
-        const tipY = restTipY + (orbY - restTipY) * reach + Math.sin(wrapAngle) * 6 * wrapAmt;
+        const tipX = wobbleTipX + (rimX - wobbleTipX) * reach + Math.cos(wrapAngle) * 9 * wrapAmt;
+        const tipY = restTipY + (rimY - restTipY) * reach + Math.sin(wrapAngle) * 6 * wrapAmt;
         const midX = c1x + (c2x - c1x) * 0.5;
         const midY = c1y + (c2y - c1y) * 0.5 + (orbY - (c1y + (c2y - c1y) * 0.5)) * reach * 0.35;
 
-        drawTentacle(ctx, tn.x, by, midX, midY, tipX, tipY, tn.width * (0.35 + 0.65 * bgDark + 0.35 * reach), 0.42 * bgDark + 0.42 * reach, reach);
+        const width = tn.width * (0.35 + 0.65 * bgDark + 0.35 * reach);
+        const alpha = 0.55 * bgDark + 0.4 * reach;
+        drawTentacle(ctx, tn.x, by, midX, midY, tipX, tipY, width, alpha, reach);
+        if (reach > 0.4) {
+          gripOverlay.push({ baseX: tn.x, baseY: by, midX: midX, midY: midY, tipX: tipX, tipY: tipY, width: width, alpha: alpha, reach: reach });
+        }
       });
 
       if (handReach > 0.002) {
@@ -4359,6 +4381,13 @@ Wherever the signal was going, you're already there.
         ctx.fill();
         ctx.shadowBlur = 0;
       }
+
+      // redraw the tendrils that are actively gripping on top of the orb's
+      // glow, so the hook reads as wrapped in front of it instead of
+      // vanishing underneath the brightest thing on screen
+      gripOverlay.forEach(function (g) {
+        drawTentacle(ctx, g.baseX, g.baseY, g.midX, g.midY, g.tipX, g.tipY, g.width, g.alpha, g.reach);
+      });
 
       requestAnimationFrame(frame);
     }
