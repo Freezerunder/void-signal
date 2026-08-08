@@ -1176,7 +1176,7 @@
 
   // ------------------------------------------------------------------ audio
 
-  let audio = null, drone = null, droneGain = null;
+  let audio = null, drone = null, droneGain = null, ambientGain = null;
 
   function ensureAudio() {
     if (audio) return;
@@ -1192,7 +1192,33 @@
       droneGain.gain.value = 0;
       drone.connect(filt); filt.connect(droneGain); droneGain.connect(audio.destination);
       drone.start();
+
+      // Ambient bed: a near-silent, ever-present pad under everything, separate
+      // from the dread drone above — atmosphere rather than a tension signal.
+      const amb1 = audio.createOscillator(), amb2 = audio.createOscillator();
+      const ambFilt = audio.createBiquadFilter();
+      const ambGain = audio.createGain();
+      amb1.type = 'sine'; amb1.frequency.value = 55;
+      amb2.type = 'sine'; amb2.frequency.value = 58.5; // slight detune, slow beating
+      ambFilt.type = 'lowpass';
+      ambFilt.frequency.value = 220;
+      ambGain.gain.value = 0;
+      const lfo = audio.createOscillator(), lfoGain = audio.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 0.05; // slow drift, ~20s cycle
+      lfoGain.gain.value = 60;
+      lfo.connect(lfoGain); lfoGain.connect(ambFilt.frequency);
+      amb1.connect(ambFilt); amb2.connect(ambFilt); ambFilt.connect(ambGain); ambGain.connect(audio.destination);
+      amb1.start(); amb2.start(); lfo.start();
+      ambientGain = ambGain;
+      updateAmbient();
     } catch (e) { audio = null; }
+  }
+
+  function updateAmbient() {
+    if (!ambientGain) return;
+    const target = S.muted ? 0 : 0.018;
+    try { ambientGain.gain.setTargetAtTime(target, audio.currentTime, 4); } catch (e) {}
   }
 
   function blip(freq, len, type, vol) {
@@ -3292,6 +3318,7 @@
     S.muted = !S.muted;
     $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
     updateDrone();
+    updateAmbient();
     if (!S.muted) blip(660, 0.08);
   });
 
