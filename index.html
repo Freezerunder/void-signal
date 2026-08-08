@@ -409,7 +409,7 @@
   }
   .menu-sub {
     font-size: 11px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase;
-    margin-top: -6px;
+    margin-top: 12px;
   }
 
   .menu-play {
@@ -420,6 +420,24 @@
     cursor: pointer;
   }
   .menu-play:hover { background: #1d0e0e; box-shadow: 0 0 26px rgba(194,69,63,.4); }
+
+  .menu-corner {
+    position: absolute; top: 22px; z-index: 1;
+    font-size: 10px; letter-spacing: .16em; color: var(--muted); text-transform: uppercase;
+    line-height: 1.8;
+  }
+  .menu-corner.tl { left: 24px; text-align: left; }
+  .menu-corner.tr { right: 24px; text-align: right; }
+  .menu-corner-line b { color: var(--dread); font-weight: 600; }
+  .menu-corner-line.dim { color: #5a4747; font-family: 'SFMono-Regular', Consolas, monospace; letter-spacing: .08em; }
+
+  .menu-footer {
+    position: absolute; left: 50%; bottom: 30px; transform: translateX(-50%);
+    z-index: 1; text-align: center; pointer-events: none;
+  }
+  .menu-footer-line {
+    font-size: 10.5px; letter-spacing: .22em; color: var(--muted); text-transform: uppercase;
+  }
 
   .menu-sidetabs {
     position: absolute; top: 50%; transform: translateY(-50%);
@@ -535,6 +553,13 @@
   @media (max-width: 820px) {
     main { grid-template-columns: 1fr; }
     #radar { width: 210px; height: 210px; }
+  }
+
+  @media (max-width: 620px) {
+    .menu-corner { font-size: 9px; }
+    .menu-corner.tl { top: 16px; left: 16px; }
+    .menu-corner.tr { top: 16px; right: 16px; }
+    .menu-footer { bottom: 74px; }
   }
 </style>
 </head>
@@ -714,6 +739,19 @@
   </div>
 
   <button class="menu-play" id="menuplay">PLAY</button>
+
+  <div class="menu-corner tl">
+    <div class="menu-corner-line">SECTOR 9 · DERELICT ARRAY</div>
+    <div class="menu-corner-line dim" id="menuclock">— UTC</div>
+  </div>
+  <div class="menu-corner tr">
+    <div class="menu-corner-line">ARRAY STATUS: <b>LISTENING</b></div>
+    <div class="menu-corner-line dim" id="menuuptime">SESSION 00:00:00</div>
+  </div>
+
+  <div class="menu-footer" id="menufooter">
+    <div class="menu-footer-line" id="menuprogress">NO SIGNAL LOGGED YET</div>
+  </div>
 
   <div class="menu-sidetabs left">
     <button class="menu-sidetab" id="openachs">ACHIEVEMENTS</button>
@@ -3085,6 +3123,7 @@ Wherever the signal was going, you're already there.
           buildGens();
           refreshLists();
           log('Slot ' + currentSlot + ' wiped. Hardcore mode does not forgive.', 'bad');
+          showMenu();
         } }]
       });
       blip(55, 1.2, 'sawtooth', 0.1);
@@ -3836,6 +3875,7 @@ Wherever the signal was going, you're already there.
             buildGens();
             refreshLists();
             log('Station reinitialised. The dark is still out there, and it remembers you.');
+            showMenu();
           } },
         { label: 'Keep playing', run: function () {} }
       ]
@@ -4021,11 +4061,66 @@ Wherever the signal was going, you're already there.
   // sight" above. Shared with showWinScreen()'s text-reveal delay so the
   // ending copy doesn't fade in over top of the animation.
   const WIN_T_BLACK = 1.6;
-  const WIN_T_FALL = 3.0;
-  const WIN_T_HOLD = 0.7;
+  const WIN_T_FALL = 2.6;
+  const WIN_T_PULL = 1.3;
+  const WIN_T_HOLD = 0.6;
   const WIN_T_GRAB = 0.9;
   const WIN_T_RISE = 3.4;
-  const WIN_TEXT_DELAY_MS = (WIN_T_BLACK + WIN_T_FALL + WIN_T_HOLD + WIN_T_GRAB + WIN_T_RISE + 0.6) * 1000;
+  const WIN_TEXT_DELAY_MS = (WIN_T_BLACK + WIN_T_FALL + WIN_T_PULL + WIN_T_HOLD + WIN_T_GRAB + WIN_T_RISE + 0.6) * 1000;
+
+  function easeInOutCubic(k) { return k < 0.5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2; }
+  function easeOutCubic(k) { return 1 - Math.pow(1 - k, 3); }
+
+  // Draws one tentacle as a tapered, textured shape instead of a single
+  // uniform-width stroke: thick rooted base narrowing to a fine tip, a
+  // faint glossy highlight for volume, and a few sucker marks near the
+  // base for texture. `reach` (0..1, how hard it's currently gripping)
+  // warms the tip color slightly so a firm grip reads as more menacing.
+  function drawTentacle(ctx, baseX, baseY, midX, midY, tipX, tipY, baseWidth, alpha, reach) {
+    if (alpha <= 0.01) return;
+    const segs = 10;
+    const pts = [];
+    for (let i = 0; i <= segs; i++) {
+      const s = i / segs;
+      const mt = 1 - s;
+      pts.push({
+        x: mt * mt * baseX + 2 * mt * s * midX + s * s * tipX,
+        y: mt * mt * baseY + 2 * mt * s * midY + s * s * tipY
+      });
+    }
+    const tipTint = reach > 0.4 ? (reach - 0.4) / 0.6 : 0;
+    for (let i = 0; i < segs; i++) {
+      const s = i / segs;
+      const w = baseWidth * (1 - s * 0.82);
+      const segAlpha = alpha * (1 - s * 0.15);
+      const r = Math.round(10 + 34 * tipTint * s);
+      const b = Math.round(14 + 8 * tipTint * s);
+      ctx.strokeStyle = 'rgba(' + r + ',8,' + b + ',' + segAlpha.toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.6, w);
+      ctx.beginPath();
+      ctx.moveTo(pts[i].x, pts[i].y);
+      ctx.lineTo(pts[i + 1].x, pts[i + 1].y);
+      ctx.stroke();
+    }
+    if (alpha > 0.18) {
+      ctx.strokeStyle = 'rgba(70,50,60,' + (alpha * 0.3).toFixed(3) + ')';
+      ctx.lineWidth = Math.max(0.5, baseWidth * 0.16);
+      ctx.beginPath();
+      ctx.moveTo(baseX + baseWidth * 0.18, baseY);
+      ctx.quadraticCurveTo(midX + baseWidth * 0.1, midY, tipX, tipY);
+      ctx.stroke();
+    }
+    if (alpha > 0.25) {
+      ctx.fillStyle = 'rgba(0,0,0,' + (alpha * 0.5).toFixed(3) + ')';
+      for (let i = 2; i <= 6; i += 2) {
+        const p = pts[i];
+        const rDot = Math.max(0.8, baseWidth * (1 - (i / segs) * 0.82) * 0.16);
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, rDot, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
 
   function startWinFX() {
     const canvas = $('winfx');
@@ -4034,13 +4129,18 @@ Wherever the signal was going, you're already there.
     canvas.height = window.innerHeight;
     const cx = canvas.width / 2;
     const topY = canvas.height * 0.12;
-    const lowY = canvas.height * 0.8;
+    const lowY = canvas.height * 0.8;      // where the fall lands
+    const pullY = canvas.height * 0.94;    // dragged deeper once tendrils grip it
     const restY = canvas.height * 0.18;
-    const catchY = lowY - (lowY - restY) * 0.18;
+    const catchY = pullY - (pullY - restY) * 0.18;
 
+    // tFall: the drop lands here. tPullEnd: tendrils have finished hauling
+    // it down to pullY. tGrabStart/tGrabEnd: the hand catches it and lifts
+    // it clear of the pullY depth. tRiseEnd: carried the rest of the way home.
     const tFall = WIN_T_BLACK;
-    const tHold = tFall + WIN_T_FALL;
-    const tGrabStart = tHold + WIN_T_HOLD;
+    const tLand = tFall + WIN_T_FALL;
+    const tPullEnd = tLand + WIN_T_PULL;
+    const tGrabStart = tPullEnd + WIN_T_HOLD;
     const tGrabEnd = tGrabStart + WIN_T_GRAB;
     const tRiseEnd = tGrabEnd + WIN_T_RISE;
 
@@ -4052,8 +4152,10 @@ Wherever the signal was going, you're already there.
         len: canvas.height * (0.32 + Math.random() * 0.2),
         speed: 0.45 + Math.random() * 0.4,
         phase: Math.random() * Math.PI * 2,
+        curlPhase: Math.random() * Math.PI * 2,
         sway: 26 + Math.random() * 36,
-        width: 9 + Math.random() * 9
+        width: 10 + Math.random() * 10,
+        reachCur: 0                        // low-pass filtered grip, eased per frame — see below
       });
     }
 
@@ -4069,41 +4171,45 @@ Wherever the signal was going, you're already there.
 
     const trail = [];
     const start = performance.now();
+    let last = start;
     winFxOn = true;
 
     function frame(now) {
       if (!winFxOn) return;
       const t = (now - start) / 1000;
+      const dt = Math.min(now - last, 100) / 1000;
+      last = now;
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       // orbY: where the spark is right now, piecewise across the timeline
       let orbY;
       if (t < tFall) {
         orbY = topY;
-      } else if (t < tHold) {
+      } else if (t < tLand) {
         const k = Math.min(1, (t - tFall) / WIN_T_FALL);
-        orbY = topY + k * k * (lowY - topY);                       // accelerating fall
+        orbY = topY + easeInOutCubic(k) * (lowY - topY);           // eased fall — decelerates into landing instead of stopping dead
+      } else if (t < tPullEnd) {
+        const k = Math.min(1, (t - tLand) / WIN_T_PULL);
+        const wobble = Math.sin(t * 10) * 4 * (1 - k);             // resisting at first, settling as the grip wins
+        orbY = lowY + (k * k) * (pullY - lowY) + wobble;           // tendrils hauling it down deeper
       } else if (t < tGrabStart) {
-        orbY = lowY + Math.sin(t * 9) * 3;                         // struggling in place
+        orbY = pullY + Math.sin(t * 9) * 3;                        // fully gripped, struggling at the bottom
       } else if (t < tGrabEnd) {
         const k = Math.min(1, (t - tGrabStart) / WIN_T_GRAB);
-        const e = 1 - Math.pow(1 - k, 3);
-        orbY = lowY - e * (lowY - catchY);                         // the catch
+        orbY = pullY - easeOutCubic(k) * (pullY - catchY);         // the catch
       } else if (t < tRiseEnd) {
         const k = Math.min(1, (t - tGrabEnd) / WIN_T_RISE);
-        const e = 1 - Math.pow(1 - k, 3);
-        orbY = catchY - e * (catchY - restY);                      // carried back up
+        orbY = catchY - easeOutCubic(k) * (catchY - restY);        // carried back up
       } else {
         orbY = restY;                                              // safe, at rest
       }
       const orbVisible = t >= tFall;
       const orbX = cx + Math.sin(t * 0.8) * 10;
 
-      // how deep into tendril territory the spark currently is — tendrils
-      // reach harder the closer it gets and let go on their own as it's
-      // pulled clear, instead of following a separately-timed schedule
-      // that could drift out of sync with where the spark actually is.
-      const nearness = Math.max(0, Math.min(1, (orbY - topY) / (lowY - topY)));
+      // how deep into tendril territory the spark currently is, measured
+      // against the deepest point (pullY) it gets dragged to — tendrils
+      // grip harder the closer it gets and release as it's pulled clear.
+      const nearness = Math.max(0, Math.min(1, (orbY - topY) / (pullY - topY)));
 
       // screen darkness: fully black until the catch, then fades out as the
       // spark is carried to safety, revealing the light backdrop underneath
@@ -4115,12 +4221,12 @@ Wherever the signal was going, you're already there.
 
       // the hand: retracted near the top until the grab window, extends down
       // to meet the spark, then mostly retracts as it carries it upward,
-      // releasing fully once the spark is safe
+      // releasing gradually (not a hard cut) once the spark is safe
       let handReach;
       if (t < tGrabStart) handReach = 0;
       else if (t < tGrabEnd) handReach = (t - tGrabStart) / WIN_T_GRAB;
       else if (t < tRiseEnd) handReach = Math.max(0, 1 - ((t - tGrabEnd) / WIN_T_RISE) * 0.85);
-      else handReach = Math.max(0, 0.15 - (t - tRiseEnd) * 0.4);
+      else handReach = Math.max(0, 0.15 - (t - tRiseEnd) * 0.22);
 
       ctx.fillStyle = 'rgba(0,0,0,' + bgDark.toFixed(3) + ')';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -4128,24 +4234,50 @@ Wherever the signal was going, you're already there.
       ctx.lineCap = 'round';
       tendrils.forEach(function (tn) {
         const distToBall = Math.abs(tn.x - orbX);
+        const proximity = Math.max(0, 1 - distToBall / (canvas.width * 0.45));
         const lunge = Math.pow(Math.max(0, Math.sin(t * 1.1 + tn.phase * 2)), 6);
-        const reach = lunge * nearness * Math.max(0, 1 - distToBall / (canvas.width * 0.45));
+
+        // target grip: during the pull phase, tendrils that are close
+        // enough clamp onto a firm hold instead of just lunging on a
+        // timer, so dragging the spark down reads as a deliberate haul.
+        let targetReach;
+        if (t < tLand) {
+          targetReach = 0;
+        } else if (t < tPullEnd) {
+          const gripK = Math.min(1, (t - tLand) / WIN_T_PULL);
+          targetReach = Math.max(lunge * nearness * proximity, proximity > 0.5 ? gripK * proximity : 0);
+        } else {
+          targetReach = Math.max(lunge, t < tGrabEnd ? 0.45 : 0) * nearness * proximity;
+        }
+        // low-pass filter the grip instead of snapping to it directly —
+        // this is what makes tendrils ease off gradually as the hand
+        // pulls the spark away, rather than instantly popping back.
+        const lagRate = targetReach > tn.reachCur ? 7 : 1.8;
+        tn.reachCur += (targetReach - tn.reachCur) * Math.min(1, dt * lagRate);
+        const reach = tn.reachCur;
+
         const restH = tn.len * (0.3 + 0.7 * bgDark);
         const sway = tn.sway * bgDark;
-        const midx = tn.x + Math.sin(t * tn.speed + tn.phase) * sway * (1 - reach * 0.6);
-        const wobbleTipX = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3;
-        const tipx = wobbleTipX + (orbX - wobbleTipX) * reach;
         const by = canvas.height + 20;
+
+        const c1x = tn.x + Math.sin(t * tn.speed + tn.phase) * sway * 0.55 * (1 - reach * 0.5);
+        const c1y = by - restH * 0.34;
+        const wobbleTipX = tn.x + Math.sin(t * tn.speed * 0.7 + tn.phase + 1) * sway * 1.3;
+        const c2x = wobbleTipX + Math.sin(t * tn.speed * 1.5 + tn.phase * 1.6) * sway * 0.35;
+        const c2y = by - restH * 0.74;
         const restTipY = by - restH;
-        const restMidY = by - restH * 0.55;
-        const tipY = restTipY + (orbY - restTipY) * reach;
-        const midY = restMidY + (orbY - restMidY) * reach * 0.7;
-        ctx.strokeStyle = 'rgba(10,8,14,' + (0.42 * bgDark + 0.4 * reach).toFixed(3) + ')';
-        ctx.lineWidth = tn.width * (0.35 + 0.65 * bgDark + 0.3 * reach);
-        ctx.beginPath();
-        ctx.moveTo(tn.x, by);
-        ctx.quadraticCurveTo(midx, midY, tipx, tipY);
-        ctx.stroke();
+
+        // once gripping hard, the tip curls/wriggles around the spark
+        // instead of just touching it, to sell the "wrapping around it"
+        // motion rather than a stiff line poking at a ball.
+        const wrapAmt = Math.max(0, reach - 0.45) / 0.55;
+        const wrapAngle = t * 4.2 + tn.curlPhase;
+        const tipX = wobbleTipX + (orbX - wobbleTipX) * reach + Math.cos(wrapAngle) * 9 * wrapAmt;
+        const tipY = restTipY + (orbY - restTipY) * reach + Math.sin(wrapAngle) * 6 * wrapAmt;
+        const midX = c1x + (c2x - c1x) * 0.5;
+        const midY = c1y + (c2y - c1y) * 0.5 + (orbY - (c1y + (c2y - c1y) * 0.5)) * reach * 0.35;
+
+        drawTentacle(ctx, tn.x, by, midX, midY, tipX, tipY, tn.width * (0.35 + 0.65 * bgDark + 0.35 * reach), 0.42 * bgDark + 0.42 * reach, reach);
       });
 
       if (handReach > 0.002) {
@@ -4369,6 +4501,57 @@ Wherever the signal was going, you're already there.
   function stopMenuThump() {
     if (menuThumpIv) clearInterval(menuThumpIv);
     menuThumpIv = null;
+  }
+
+  // Corner readouts — flavor HUD text filling the dead space above the
+  // title and to the sides of the PLAY button. Clock is real UTC time;
+  // "session" is just time since the menu was shown, not a real uptime.
+  let menuClockIv = null;
+  let menuSessionStart = 0;
+
+  function pad2(n) { return n < 10 ? '0' + n : '' + n; }
+
+  function tickMenuCorners() {
+    const now = new Date();
+    const clockEl = $('menuclock');
+    if (clockEl) {
+      clockEl.textContent = pad2(now.getUTCHours()) + ':' + pad2(now.getUTCMinutes()) + ':' +
+        pad2(now.getUTCSeconds()) + ' UTC';
+    }
+    const upEl = $('menuuptime');
+    if (upEl) {
+      const secs = Math.max(0, Math.floor((Date.now() - menuSessionStart) / 1000));
+      const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
+      upEl.textContent = 'SESSION ' + pad2(h) + ':' + pad2(m) + ':' + pad2(s);
+    }
+  }
+
+  function startMenuClock() {
+    menuSessionStart = Date.now();
+    tickMenuCorners();
+    if (menuClockIv) clearInterval(menuClockIv);
+    menuClockIv = setInterval(tickMenuCorners, 1000);
+  }
+
+  function stopMenuClock() {
+    if (menuClockIv) clearInterval(menuClockIv);
+    menuClockIv = null;
+  }
+
+  // Footer readout — surfaces the best logged progress across all slots,
+  // so returning players see something concrete under PLAY instead of
+  // empty space.
+  function updateMenuFooter() {
+    const el = $('menuprogress');
+    if (!el) return;
+    let best = null;
+    for (let n = 1; n <= SLOT_COUNT; n++) {
+      const info = slotSummary(n);
+      if (info && (!best || info.level > best.level)) best = { slot: n, level: info.level };
+    }
+    el.textContent = best
+      ? 'BEST SIGNAL: LEVEL ' + best.level + ' · SLOT ' + best.slot
+      : 'NO SIGNAL LOGGED YET';
   }
 
   // A slow rotating status line, purely flavor — fills the gap between the
@@ -4620,6 +4803,7 @@ Wherever the signal was going, you're already there.
         { label: 'Wipe it', danger: true, run: function () {
             try { localStorage.removeItem(slotKey(n)); } catch (e) {}
             buildMenu();
+            updateMenuFooter();
           } },
         { label: 'Keep it', run: function () {} }
       ]
@@ -4650,6 +4834,7 @@ Wherever the signal was going, you're already there.
     closeMenuPanels();
     stopMenuThump();
     stopMenuFX();
+    stopMenuClock();
     // Boot while the menu is still fully opaque, so the game UI it builds
     // never gets a chance to show through — only fade the menu away once
     // the intro screen (added by bootGame -> showIntro) is fully in place.
@@ -4663,6 +4848,7 @@ Wherever the signal was going, you're already there.
     loadSettings();
     buildMenu();
     buildMenuAchs();
+    updateMenuFooter();
     $('menuscreen').classList.add('on');
     $('menuscreen').addEventListener('click', function unlock() {
       ensureAudio();
@@ -4670,6 +4856,7 @@ Wherever the signal was going, you're already there.
     }, { once: true });
     startMenuThump();
     startMenuFX();
+    startMenuClock();
   }
 
   // =================================================================== boot
