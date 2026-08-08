@@ -3183,6 +3183,12 @@ Wherever the signal was going, you're already there.
       })
     ]);
 
+    section('Cutscenes', [
+      btn('Intro screen', function () { showIntro(); }),
+      btn('Death flourish', function () { showDeathFlourish(); }),
+      btn('Win screen (ending)', function () { showWinScreen(); })
+    ]);
+
     section('Dread', [
       btn('Dread = 0', function () { S.dread = 0; }),
       btn('Dread = 40', function () { addDread(40 - S.dread); }),
