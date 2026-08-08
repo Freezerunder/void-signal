@@ -384,7 +384,10 @@
     font-size: 11px; letter-spacing: .3em; color: var(--muted); text-transform: uppercase;
     margin-top: -6px;
   }
-  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 12px; }
+  .menu-slots { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 420px; margin-top: 4px; }
+  .menu-achs {
+    width: 100%; max-width: 640px; margin-top: 4px; max-height: 46vh; overflow-y: auto; padding: 2px;
+  }
   .menu-slot { display: flex; gap: 8px; }
   .menu-slot-main {
     flex: 1; text-align: left; padding: 13px 16px; border-radius: 8px;
@@ -591,7 +594,12 @@
 <div class="storyscreen dark" id="menuscreen">
   <div class="menu-title" data-text="VOID SIGNAL">VOID SIGNAL</div>
   <div class="menu-sub">DERELICT LISTENING STATION · SECTOR 9</div>
+  <div class="tabs" id="menutabs">
+    <button class="tab on" data-mtab="slots">CONTINUE</button>
+    <button class="tab" data-mtab="achs">ACHIEVEMENTS</button>
+  </div>
   <div class="menu-slots" id="menuslots"></div>
+  <div class="menu-achs ach-grid" id="menuachs" hidden></div>
 </div>
 
 <div class="storyscreen dark" id="introscreen">
@@ -953,6 +961,34 @@ Wherever the signal was going, you're already there.
     { id: 'c6',  name: 'Well Stocked',     d: 'Open 250 chests',           c: function (S) { return S.chests >= 250; } }
   ];
 
+  // Meta-achievements: shown on the title screen, not the in-run Discoveries
+  // tab. Unlocked state lives outside any save slot (see META_KEY below) so
+  // wiping or switching slots never takes one away. "Try Hard" and "THE
+  // TRYHARD" read as two tiers but are currently the same trigger, since
+  // scars only ever come from Contact in this build.
+  const META_ACHS = [
+    { id: 'good_ending', name: 'Good Ending', d: 'Complete the game.',
+      c: function (S) { return S.finished; } },
+    { id: 'try_hard', name: 'Try Hard', d: 'Complete the game without dying.',
+      c: function (S) { return S.finished && S.contacts === 0; } },
+    { id: 'the_tryhard', name: 'THE TRYHARD', d: 'Complete the game without taking a single scar.',
+      c: function (S) { return S.finished && S.scars === 0; } },
+    { id: 'not_cut_out', name: 'You’re Not Cut Out For This', d: 'Die before level 5.',
+      c: function (S) { return S.diedBelow5; } },
+    { id: 'depths_caught_you', name: 'The Depths Caught You First', d: 'Die at level 199.',
+      c: function (S) { return S.diedAt199; } },
+    { id: 'middle_class', name: 'Middle Class', d: 'Reach 1,000,000 signal.',
+      c: function (S) { return S.total >= 1e6; } },
+    { id: 'rich', name: 'Rich', d: 'Reach 1,000,000,000 signal.',
+      c: function (S) { return S.total >= 1e9; } },
+    { id: 'elon_musk', name: 'Elon Musk', d: 'Reach 999,000,000,000 signal.',
+      c: function (S) { return S.total >= 999e9; } },
+    { id: 'trillionaire', name: 'Trillionaire', d: 'Reach 1,000,000,000,000 signal.',
+      c: function (S) { return S.total >= 1e12; } },
+    { id: 'halfway', name: 'Halfway There', d: 'Reach level 100.',
+      c: function (S) { return S.level >= 100; } }
+  ];
+
   // ---------------------------------------------------------------- store
   // Temporary, repeatable buys — unlike UPGRADES these never run out and
   // never get cheaper. Cost is scaled off your own current output rather
@@ -1079,7 +1115,7 @@ Wherever the signal was going, you're already there.
       dread: 0, peakDread: 0, scars: 0, contacts: 0, goDarks: 0,
       travellers: 0, accepted: 0, refused: 0, ignored: 0,
       goodEvents: 0, badEvents: 0,
-      level: 1, darkSpent: 0, finished: false,
+      level: 1, darkSpent: 0, finished: false, diedBelow5: false, diedAt199: false,
       chests: 0, chestGood: 0, chestBad: 0,
       watchers: 0,
       playtime: 0, best: 0,
@@ -2750,6 +2786,9 @@ Wherever the signal was going, you're already there.
 
   function contact() {
     showDeathFlourish();
+    if (S.level < 5) S.diedBelow5 = true;
+    if (S.level === 199) S.diedAt199 = true;
+    checkMetaAchs();
     // your first one is gentler — the rest are not
     const share = DEV.godMode ? 0 : (S.contacts === 0 ? 0.25 : 0.5);
     S.contacts++;
@@ -3141,6 +3180,7 @@ Wherever the signal was going, you're already there.
     blip(660, 0.2, 'triangle');
     blip(880, 0.22, 'triangle');
     if (l >= 200 && !S.finished) { S.finished = true; showWinScreen(); }
+    checkMetaAchs();
   }
 
   // ============================================== DEV PANEL START =========
@@ -3624,6 +3664,7 @@ Wherever the signal was going, you're already there.
       listTimer = 0;
       checkLevel();
       checkAchs();
+      checkMetaAchs();
       refreshChips();
       if (currentTab === 'array') refreshGens();
       if (currentTab === 'upgrades') refreshUpgrades();
@@ -3771,6 +3812,43 @@ Wherever the signal was going, you're already there.
     }, { once: true });
   }
 
+  // ==================================================== meta-achievements
+
+  const META_KEY = SAVE_KEY + '.meta';
+  let metaUnlocked = {};
+
+  function loadMetaAchs() {
+    try {
+      const raw = localStorage.getItem(META_KEY);
+      metaUnlocked = raw ? JSON.parse(raw) : {};
+    } catch (e) { metaUnlocked = {}; }
+  }
+
+  function saveMetaAchs() {
+    try { localStorage.setItem(META_KEY, JSON.stringify(metaUnlocked)); } catch (e) {}
+  }
+
+  function checkMetaAchs() {
+    META_ACHS.forEach(function (a) {
+      if (metaUnlocked[a.id] || !a.c(S)) return;
+      metaUnlocked[a.id] = true;
+      saveMetaAchs();
+      log('Achievement unlocked — ' + a.name, 'good');
+    });
+  }
+
+  function buildMenuAchs() {
+    const host = $('menuachs');
+    host.innerHTML = '';
+    META_ACHS.forEach(function (a) {
+      const d = document.createElement('div');
+      d.className = 'ach' + (metaUnlocked[a.id] ? ' got' : '');
+      d.innerHTML = '<div class="n">' + (metaUnlocked[a.id] ? '★ ' : '☆ ') + a.name + '</div>' +
+                    '<div class="d">' + a.d + '</div>';
+      host.appendChild(d);
+    });
+  }
+
   // ============================================================= slot menu
 
   let menuThumpIv = null;
@@ -3837,9 +3915,22 @@ Wherever the signal was going, you're already there.
     bootGame();
   }
 
+  $('menutabs').addEventListener('click', function (e) {
+    const b = e.target.closest('.tab');
+    if (!b) return;
+    Array.prototype.forEach.call($('menutabs').children, function (t) {
+      t.classList.toggle('on', t === b);
+    });
+    const onAchs = b.dataset.mtab === 'achs';
+    $('menuslots').hidden = onAchs;
+    $('menuachs').hidden = !onAchs;
+  });
+
   function showMenu() {
     migrateLegacySave();
+    loadMetaAchs();
     buildMenu();
+    buildMenuAchs();
     $('menuscreen').classList.add('on');
     $('menuscreen').addEventListener('click', function unlock() {
       ensureAudio();
