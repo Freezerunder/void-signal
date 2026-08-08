@@ -333,6 +333,30 @@
 
   .box.dreadful { border-color: #4a2b2b; box-shadow: 0 0 40px rgba(194,69,63,.15); }
 
+  /* ------------------------------------------------------- story screens */
+  .storyscreen {
+    position: fixed; inset: 0; z-index: 200;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 22px; text-align: center; padding: 40px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    opacity: 0; pointer-events: none; transition: opacity 1.4s ease;
+  }
+  .storyscreen.on { opacity: 1; pointer-events: auto; }
+  .storyscreen.dark { background: #000; color: var(--dread); }
+  .storyscreen.light { background: #f2efe8; color: #14151a; }
+  .storyscreen .story-text {
+    max-width: 560px; font-size: 14px; line-height: 1.95; letter-spacing: .02em;
+    white-space: pre-line;
+  }
+  .storyscreen .story-prompt {
+    font-size: 10px; letter-spacing: .25em; text-transform: uppercase; opacity: .55;
+  }
+  #deathscreen { transition: opacity .5s ease; }
+  #deathscreen .story-text {
+    font-size: 26px; letter-spacing: .28em; text-transform: uppercase;
+    animation: flick 2.2s steps(1) infinite;
+  }
+
   /* ------------------------------------------------- DEV PANEL START ---- */
   .tab.dev { border-color: #6b3f8f; color: #c48fd6; }
   .tab.dev.on { border-color: #c48fd6; background: #221630; }
@@ -519,6 +543,36 @@
     <div class="opts" id="modal-opts"></div>
     <div class="timerbar" id="modal-timerwrap" hidden><i id="modal-timer"></i></div>
   </div>
+</div>
+
+<div class="storyscreen dark" id="introscreen">
+  <div class="story-text" id="introtext">
+They found the station the way they always find them: quiet, and already listening.
+
+You didn't volunteer. Nobody volunteers for Sector 9 — you get sent, and nobody tells you why, only that the last listener stopped filing reports and the array can't be left unmanned.
+
+Somewhere past the antenna field, something has been transmitting since before the station was built. Your job is to log it. Not answer it. Just log it.
+
+The dish is already pointed at the dark. It's been waiting for someone to sit down.
+  </div>
+  <div class="story-prompt">Click or press any key to begin</div>
+</div>
+
+<div class="storyscreen dark" id="deathscreen">
+  <div class="story-text" id="deathtext">RETRYING…</div>
+</div>
+
+<div class="storyscreen light" id="winscreen">
+  <div class="story-text" id="wintext">
+Two hundred levels of listening, and the dark finally answers — not with dread this time, but with something almost gentle.
+
+The noise floor drops to nothing. The dish stops searching. For the first time since you sat down at this station, the silence doesn't feel like it's waiting for anything.
+
+Wherever the signal was going, you're already there.
+
+— END OF TRANSMISSION —
+  </div>
+  <div class="story-prompt">Click to keep listening anyway</div>
 </div>
 
 <script>
@@ -971,7 +1025,7 @@
       dread: 0, peakDread: 0, scars: 0, contacts: 0, goDarks: 0,
       travellers: 0, accepted: 0, refused: 0, ignored: 0,
       goodEvents: 0, badEvents: 0,
-      level: 1, darkSpent: 0,
+      level: 1, darkSpent: 0, finished: false,
       chests: 0, chestGood: 0, chestBad: 0,
       watchers: 0,
       playtime: 0, best: 0,
@@ -1045,10 +1099,10 @@
   }
 
   // Going dark is the strongest tool in the game, so it starts out of reach
-  // and only becomes affordable once production has ramped up.
+  // and keeps climbing a steady ~600/level rather than sitting flat early on.
   function darkCost() {
     if (DEV.freeDark) return 0;
-    return (1000 + levelReq(S.level) * 0.07) * mods.darkCost;
+    return (1000 + (S.level - 1) * 600) * mods.darkCost;
   }
   function canAffordDark() { return DEV.infSignal || S.signal >= darkCost(); }
 
@@ -1176,7 +1230,7 @@
 
   // ------------------------------------------------------------------ audio
 
-  let audio = null, drone = null, droneGain = null, ambientGain = null;
+  let audio = null, drone = null, droneGain = null, ambientGain = null, heavenly = null;
 
   function ensureAudio() {
     if (audio) return;
@@ -1219,6 +1273,54 @@
     if (!ambientGain) return;
     const target = S.muted ? 0 : 0.018;
     try { ambientGain.gain.setTargetAtTime(target, audio.currentTime, 4); } catch (e) {}
+  }
+
+  // A warm, original ambient piece for the ending — ducks the dread drone
+  // and horror bed out, swells in a slow major pad, and drifts through a
+  // sparse arpeggio. Not a cover of anything, just built in that spirit.
+  function playHeavenlyMusic() {
+    ensureAudio();
+    if (!audio) return;
+    stopHeavenlyMusic();
+    try { droneGain.gain.setTargetAtTime(0, audio.currentTime, 2); } catch (e) {}
+    try { ambientGain.gain.setTargetAtTime(0, audio.currentTime, 2); } catch (e) {}
+
+    const padGain = audio.createGain();
+    padGain.gain.value = 0;
+    padGain.connect(audio.destination);
+    const chord = [130.81, 164.81, 196.00, 261.63, 329.63]; // C E G C E, spread wide and warm
+    const oscs = chord.map(function (freq) {
+      const o = audio.createOscillator(), g = audio.createGain(), filt = audio.createBiquadFilter();
+      o.type = 'sine'; o.frequency.value = freq;
+      filt.type = 'lowpass'; filt.frequency.value = 1100;
+      g.gain.value = 0.22;
+      o.connect(filt); filt.connect(g); g.connect(padGain);
+      o.start();
+      return o;
+    });
+    if (!S.muted) padGain.gain.setTargetAtTime(0.16, audio.currentTime, 3.5);
+
+    const arpNotes = [523.25, 659.25, 784.00, 987.77, 784.00, 659.25]; // C E G B G E
+    let ai = 0;
+    const arpTimer = setInterval(function () {
+      blip(arpNotes[ai % arpNotes.length], 1.8, 'sine', 0.035);
+      ai++;
+    }, 1400);
+
+    heavenly = { padGain: padGain, oscs: oscs, arpTimer: arpTimer };
+  }
+
+  function stopHeavenlyMusic() {
+    if (!heavenly) return;
+    const h = heavenly;
+    heavenly = null;
+    clearInterval(h.arpTimer);
+    try {
+      h.padGain.gain.setTargetAtTime(0, audio.currentTime, 2);
+      setTimeout(function () { h.oscs.forEach(function (o) { try { o.stop(); } catch (e) {} }); }, 3000);
+    } catch (e) {}
+    updateDrone();
+    updateAmbient();
   }
 
   function blip(freq, len, type, vol) {
@@ -2593,6 +2695,7 @@
   // ================================================================= contact
 
   function contact() {
+    showDeathFlourish();
     // your first one is gentler — the rest are not
     const share = DEV.godMode ? 0 : (S.contacts === 0 ? 0.25 : 0.5);
     S.contacts++;
@@ -2983,6 +3086,7 @@
         '. Production +' + ((l - 1) * 2) + '%. The blackout cells cost more now.');
     blip(660, 0.2, 'triangle');
     blip(880, 0.22, 'triangle');
+    if (l >= 200 && !S.finished) { S.finished = true; showWinScreen(); }
   }
 
   // ============================================== DEV PANEL START =========
@@ -3319,6 +3423,9 @@
     $('mutebtn').textContent = 'SOUND: ' + (S.muted ? 'OFF' : 'ON');
     updateDrone();
     updateAmbient();
+    if (heavenly) {
+      try { heavenly.padGain.gain.setTargetAtTime(S.muted ? 0 : 0.16, audio.currentTime, 1.5); } catch (e) {}
+    }
     if (!S.muted) blip(660, 0.08);
   });
 
@@ -3452,6 +3559,43 @@
     requestAnimationFrame(frame);
   }
 
+  // ========================================================= story screens
+
+  function showIntro() {
+    const scr = $('introscreen');
+    scr.classList.add('on');
+    const dismiss = function () {
+      scr.classList.remove('on');
+      ensureAudio();
+      window.removeEventListener('keydown', dismiss);
+    };
+    scr.addEventListener('click', dismiss, { once: true });
+    window.addEventListener('keydown', dismiss, { once: true });
+  }
+
+  function showDeathFlourish() {
+    const scr = $('deathscreen'), el = $('deathtext');
+    const lines = ['RETRYING…', 'RETRYING…', 'CONNECTION FAILED.', 'YOU ARE BEING FORGOTTEN.'];
+    let i = 0;
+    el.textContent = lines[0];
+    scr.classList.add('on');
+    const iv = setInterval(function () {
+      i++;
+      if (i < lines.length) { el.textContent = lines[i]; }
+      else { clearInterval(iv); scr.classList.remove('on'); }
+    }, 650);
+  }
+
+  function showWinScreen() {
+    const scr = $('winscreen');
+    scr.classList.add('on');
+    playHeavenlyMusic();
+    scr.addEventListener('click', function () {
+      scr.classList.remove('on');
+      stopHeavenlyMusic();
+    }, { once: true });
+  }
+
   // =================================================================== boot
 
   const hadSave = load();
@@ -3474,6 +3618,7 @@
 
   window.addEventListener('beforeunload', function () { save(true); });
 
+  showIntro();
   requestAnimationFrame(frame);
 })();
 </script>
