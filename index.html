@@ -389,6 +389,11 @@
         <canvas id="scope" width="250" height="54"></canvas>
       </div>
 
+      <div class="card scope-card">
+        <div class="label">Noise Floor</div>
+        <canvas id="spectro" width="250" height="54"></canvas>
+      </div>
+
       <div class="card dread-card">
         <div class="dread-top">
           <div class="label">Station Rating</div>
@@ -1367,6 +1372,41 @@
       Math.round(167 + hot * (69 - 167)) + ',' + Math.round(160 + hot * (63 - 160)) + ',.9)';
     octx.lineWidth = 1.5;
     octx.stroke();
+  }
+
+  // ============================================================ noise floor
+  // A frequency waterfall beneath the trace, scrolling right to left one
+  // column per frame: a bright ridge tracks the array's own output (louder
+  // production climbs and widens it), while the surrounding static grows
+  // grittier and redder as dread rises — interference bleeding in from
+  // whatever's listening back.
+
+  const spectroCv = $('spectro');
+  const spctx = spectroCv.getContext('2d');
+  let spectroInit = false;
+
+  function drawSpectro(dt) {
+    const w = spectroCv.width, h = spectroCv.height;
+    if (!spectroInit) { spctx.fillStyle = '#090b10'; spctx.fillRect(0, 0, w, h); spectroInit = true; }
+
+    spctx.drawImage(spectroCv, -1, 0);
+
+    const hot = S.dread / 100;
+    const loud = Math.min(1, Math.log10(1 + perSecond()) / 30);
+    const baseR = 63 + hot * (194 - 63);
+    const baseG = 167 + hot * (69 - 167);
+    const baseB = 160 + hot * (63 - 160);
+
+    for (let y = 0; y < h; y++) {
+      const bin = 1 - y / h;
+      const ridge = Math.exp(-Math.pow((bin - loud * 0.8) * 6, 2));
+      const noise = Math.random() * (0.12 + hot * 0.4);
+      const v = Math.min(1, ridge * (0.4 + loud) + noise);
+      if (v < 0.04) continue;
+      spctx.fillStyle = 'rgba(' + Math.round(baseR * v) + ',' + Math.round(baseG * v) + ',' +
+        Math.round(baseB * v) + ',' + Math.min(1, v * 1.2) + ')';
+      spctx.fillRect(w - 1, y, 1, 1);
+    }
   }
 
   function ping(clientX, clientY) {
@@ -3343,6 +3383,7 @@
 
     drawRadar(dt);
     drawScope(dt);
+    drawSpectro(dt);
     refreshDread();
     updateDrone();
 
