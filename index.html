@@ -356,7 +356,18 @@
     font-size: 26px; letter-spacing: .28em; text-transform: uppercase;
     animation: flick 2.2s steps(1) infinite;
   }
-  #winfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+  #winfx, #introfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+  #introscreen .story-prompt { opacity: 0; transition: opacity 1s ease; }
+  #introscreen.reveal-text .story-prompt { opacity: .55; }
+  .intro-cursor { animation: introblink 1s steps(1) infinite; }
+  @keyframes introblink { 50% { opacity: 0; } }
+  .intro-whisper {
+    position: absolute; left: 50%; bottom: 9%; transform: translateX(-50%);
+    font-size: 11px; letter-spacing: .32em; text-transform: uppercase;
+    color: rgba(194, 69, 63, 0); pointer-events: none; white-space: nowrap;
+    transition: color 2s ease;
+  }
+  .intro-whisper.show { color: rgba(194, 69, 63, 0.6); }
   /* the ending copy stays hidden — the rescue animation plays with nothing
      in front of it — until showWinScreen() adds .reveal-text once it resolves */
   #winscreen .story-text, #winscreen .story-prompt { opacity: 0; transition: opacity 1.6s ease; }
@@ -787,16 +798,10 @@
 </div>
 
 <div class="storyscreen dark" id="introscreen">
-  <div class="story-text" id="introtext">
-They found the station the way they always find them: quiet, and already listening.
-
-You didn't volunteer. Nobody volunteers for Sector 9 — you get sent, and nobody tells you why, only that the last listener stopped filing reports and the array can't be left unmanned.
-
-Somewhere past the antenna field, something has been transmitting since before the station was built. Your job is to log it. Not answer it. Just log it.
-
-The dish is already pointed at the dark. It's been waiting for someone to sit down.
-  </div>
-  <div class="story-prompt">Click or press any key to begin</div>
+  <canvas id="introfx"></canvas>
+  <div class="story-text" id="introtext"></div>
+  <div class="intro-whisper" id="introwhisper"></div>
+  <div class="story-prompt" id="introprompt">Click or press any key to begin</div>
 </div>
 
 <div class="storyscreen dark" id="deathscreen">
@@ -4043,10 +4048,123 @@ Wherever the signal was going, you're already there.
 
   // ========================================================= story screens
 
-  function showIntro() {
+  const INTRO_TEXT =
+    'They found the station the way they always find them: quiet, and already listening.\n\n' +
+    "You didn't volunteer. Nobody volunteers for Sector 9 — you get sent, and nobody tells you why, only that the last listener stopped filing reports and the array can't be left unmanned.\n\n" +
+    'Somewhere past the antenna field, something has been transmitting since before the station was built. Your job is to log it. Not answer it. Just log it.\n\n' +
+    "The dish is already pointed at the dark. It's been waiting for someone to sit down.";
+
+  let introFxOn = false;
+  let introFxResizeHandler = null;
+
+  // Ambient "tuning in" background: drifting scanlines, sparse static, and
+  // a wandering waveform trace — cheap atmosphere reusing the same canvas-FX
+  // vocabulary as the menu/ending screens instead of a blank black backdrop.
+  function startIntroFX() {
+    const canvas = $('introfx');
+    const ctx = canvas.getContext('2d');
+    fitCanvasToBox(canvas);
+    const start = performance.now();
+    introFxOn = true;
+    if (!introFxResizeHandler) {
+      introFxResizeHandler = function () { if (introFxOn) fitCanvasToBox(canvas); };
+      window.addEventListener('resize', introFxResizeHandler);
+      window.addEventListener('orientationchange', introFxResizeHandler);
+    }
+
+    function frame(now) {
+      if (!introFxOn) return;
+      const t = (now - start) / 1000;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.strokeStyle = 'rgba(194,69,63,0.05)';
+      ctx.lineWidth = 1;
+      const spacing = 5;
+      const offset = (t * 14) % spacing;
+      for (let y = offset; y < canvas.height; y += spacing) {
+        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+      }
+
+      for (let i = 0; i < 50; i++) {
+        if (Math.random() < 0.55) continue;
+        ctx.globalAlpha = Math.random() * 0.16;
+        ctx.fillStyle = 'rgba(194,69,63,1)';
+        ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1);
+      }
+      ctx.globalAlpha = 1;
+
+      // something transmitting, faint, near the top of the screen
+      const wy = canvas.height * 0.16;
+      ctx.beginPath();
+      ctx.strokeStyle = 'rgba(194,69,63,0.3)';
+      ctx.lineWidth = 1.3;
+      for (let x = 0; x <= canvas.width; x += 4) {
+        const yy = wy + Math.sin(x * 0.02 + t * 1.3) * 6 + Math.sin(x * 0.007 - t * 0.6) * 10 + (Math.random() - 0.5) * 2;
+        if (x === 0) ctx.moveTo(x, yy); else ctx.lineTo(x, yy);
+      }
+      ctx.stroke();
+
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  function stopIntroFX() { introFxOn = false; }
+
+  // Types the backstory out like a terminal log instead of dumping it as
+  // static text — with per-character jitter and longer pauses on sentence/
+  // paragraph breaks so it reads with actual pacing, not a metronome.
+  function typeIntroText(el, text, onDone) {
+    let i = 0;
+    let timer = null;
+    const cursor = document.createElement('span');
+    cursor.className = 'intro-cursor';
+    cursor.textContent = '▍';
+    function step() {
+      i++;
+      el.textContent = text.slice(0, i);
+      el.appendChild(cursor);
+      if (i >= text.length) { onDone(); return; }
+      const ch = text[i - 1];
+      let delay = 16 + Math.random() * 26;
+      if (ch === '\n') delay = 280;
+      else if (ch === '.' || ch === '—') delay = 340;
+      else if (ch === ',') delay = 130;
+      timer = setTimeout(step, delay);
+    }
+    step();
+    return function cancel() { clearTimeout(timer); };
+  }
+
+  // A quiet, personal aside once the backstory finishes typing — real save
+  // data in an unsettling voice, cheaper and sharper than any generic scare.
+  function pickIntroWhisper(hadSave) {
+    const lines = ["it's already listening.", 'you keep coming back.', 'the array remembers you.'];
+    if (hadSave && S.playtime > 300) lines.push('you have been listening for ' + fmtTime(S.playtime) + '.');
+    if (hadSave && S.scars > 0) lines.push('it has reached you ' + S.scars + ' time' + (S.scars === 1 ? '' : 's') + ' before.');
+    return pick(lines);
+  }
+
+  function showIntro(hadSave) {
     const scr = $('introscreen');
+    const textEl = $('introtext');
+    const whisper = $('introwhisper');
+    textEl.textContent = '';
+    whisper.classList.remove('show');
+    scr.classList.remove('reveal-text');
     scr.classList.add('on');
+    startIntroFX();
+    const timers = [];
+    const cancelTyping = typeIntroText(textEl, INTRO_TEXT, function () {
+      scr.classList.add('reveal-text');
+      whisper.textContent = pickIntroWhisper(hadSave);
+      timers.push(setTimeout(function () { whisper.classList.add('show'); }, 1600));
+      timers.push(setTimeout(function () { whisper.classList.remove('show'); }, 5200));
+    });
     const dismiss = function () {
+      cancelTyping();
+      timers.forEach(clearTimeout);
+      stopIntroFX();
       scr.classList.remove('on');
       ensureAudio();
       window.removeEventListener('keydown', dismiss);
@@ -5047,7 +5165,7 @@ Wherever the signal was going, you're already there.
     window.addEventListener('beforeunload', function () { save(true); });
 
     gameRunning = true;
-    showIntro();
+    showIntro(hadSave);
     requestAnimationFrame(frame);
   }
 
