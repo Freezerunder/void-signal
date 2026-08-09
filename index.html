@@ -4080,13 +4080,13 @@ Wherever the signal was going, you're already there.
   // light reaches down from a "heavenly sight" above, catches it, and
   // carries it home. Shared with showWinScreen()'s text-reveal delay so
   // the ending copy doesn't fade in over top of the animation.
-  const WIN_T_BLACK = 2.0;
-  const WIN_T_FALL = 3.6;      // the rise from the depths (name kept for fewer call-site renames)
-  const WIN_T_PULL = 2.0;
-  const WIN_T_HOLD = 1.4;
+  const WIN_T_BLACK = 3.0;
+  const WIN_T_FALL = 7.0;      // the rise from the depths (name kept for fewer call-site renames)
+  const WIN_T_PULL = 4.0;
+  const WIN_T_HOLD = 4.5;
   const WIN_T_SNAP = 0.2;      // the two grippers' own fast attack, decoupled from the slower overall drag
-  const WIN_T_GRAB = 1.1;
-  const WIN_T_RISE = 4.6;
+  const WIN_T_GRAB = 1.4;
+  const WIN_T_RISE = 8.5;
   const WIN_TEXT_DELAY_MS = (WIN_T_BLACK + WIN_T_FALL + WIN_T_PULL + WIN_T_HOLD + WIN_T_GRAB + WIN_T_RISE + 0.6) * 1000;
 
   function easeOutCubic(k) { return 1 - Math.pow(1 - k, 3); }
@@ -4231,6 +4231,7 @@ Wherever the signal was going, you're already there.
       // orbY: where the spark is right now, piecewise across the timeline
       let orbY;
       let riseK = 0; // 0..1 progress through the rise, reused below for nearness
+      let holdSurge = 0; // 0..1, peaks mid-struggle during the near-escape bump, reused for the light flicker below
       if (t < tRiseStart) {
         orbY = depthY;                                              // still down in the depths, not yet visible
       } else if (t < tApex) {
@@ -4248,8 +4249,15 @@ Wherever the signal was going, you're already there.
       } else if (t < tGrabStart) {
         // fully gripped, thrashing at the bottom — two overlapping
         // frequencies plus a slower irrational-ratio wobble so it reads as
-        // a struggle, not a metronome
-        orbY = pullY + Math.sin(t * 9) * 7 + Math.sin(t * 21.3) * 3 + Math.sin(t * 5.7) * 4;
+        // a struggle, not a metronome. A single desperate surge (gaussian
+        // bump, not a sine) is layered in partway through: it claws most
+        // of the way back up toward the light before losing the fight and
+        // getting hauled back down — an "almost got free" beat that gives
+        // the longer hold time somewhere to go instead of just idling.
+        const holdK = (t - tPullEnd) / WIN_T_HOLD;
+        holdSurge = Math.exp(-Math.pow((holdK - 0.42) / 0.16, 2));
+        const surgeLift = holdSurge * (pullY - riseApexY) * 0.55;
+        orbY = pullY - surgeLift + Math.sin(t * 9) * 7 + Math.sin(t * 21.3) * 3 + Math.sin(t * 5.7) * 4;
       } else if (t < tGrabEnd) {
         const k = Math.min(1, (t - tGrabStart) / WIN_T_GRAB);
         orbY = pullY - easeOutCubic(k) * (pullY - catchY);         // the catch
@@ -4275,9 +4283,11 @@ Wherever the signal was going, you're already there.
         : Math.max(0, Math.min(1, (orbY - topY) / (pullY - topY)));
 
       // screen darkness: fully black until the catch, then fades out as the
-      // spark is carried to safety, revealing the light backdrop underneath
+      // spark is carried to safety, revealing the light backdrop underneath.
+      // The near-escape surge above gets a matching flicker of not-quite-
+      // full black, as if it briefly glimpsed the light before losing it.
       let bgDark;
-      if (t < tGrabEnd) bgDark = 1;
+      if (t < tGrabEnd) bgDark = 1 - holdSurge * 0.22;
       else if (t < tRiseEnd) bgDark = 1 - (t - tGrabEnd) / WIN_T_RISE;
       else bgDark = 0;
       bgDark = Math.max(0, Math.min(1, bgDark));
