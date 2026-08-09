@@ -85,7 +85,7 @@
 
   .dish-card { padding: 14px; text-align: center; position: relative; }
   #radar {
-    display: block; width: 250px; height: 250px; margin: 0 auto;
+    display: block; width: 250px; height: 250px; max-width: 100%; aspect-ratio: 1 / 1; margin: 0 auto;
     cursor: crosshair; border-radius: 50%; transition: transform .06s ease, filter .4s ease;
   }
   #radar:active { transform: scale(.97); }
@@ -4072,6 +4072,7 @@ Wherever the signal was going, you're already there.
   // light. Abstract on purpose — a few wavering strokes read as "grasping"
   // far better than anything that tries to look literal at this scale.
   let winFxOn = false;
+  let winFxResizeHandler = null;
 
   // Ending timeline (seconds): a held black beat, then the spark slowly
   // rises up out of the depths — that's when the tendrils notice it and
@@ -4145,11 +4146,23 @@ Wherever the signal was going, you're already there.
     }
   }
 
+  // Sizes a canvas's pixel buffer to match its actual rendered CSS box
+  // (not window.innerWidth/innerHeight, which can drift from the layout
+  // viewport on iOS — Safari's collapsing toolbar changes window.innerHeight
+  // without a matching canvas-buffer update, which stretches every
+  // ctx.arc() circle into an oval). getBoundingClientRect() reads the real
+  // post-layout size, so this stays correct through toolbar/orientation
+  // changes as long as it's re-called on resize.
+  function fitCanvasToBox(canvas) {
+    const r = canvas.getBoundingClientRect();
+    canvas.width = Math.max(1, Math.round(r.width));
+    canvas.height = Math.max(1, Math.round(r.height));
+  }
+
   function startWinFX() {
     const canvas = $('winfx');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    fitCanvasToBox(canvas);
     const cx = canvas.width / 2;
     const topY = canvas.height * 0.12;
     const depthY = canvas.height * 1.1;    // starts below the visible bottom edge, still in the depths
@@ -4199,6 +4212,14 @@ Wherever the signal was going, you're already there.
     const start = performance.now();
     let last = start;
     winFxOn = true;
+
+    // Only re-syncs the pixel buffer (not the geometry consts above, which
+    // are fine as fixed proportions of the size at animation-start) — a
+    // mid-ending resize/rotation is rare and brief, so keeping circles
+    // circular matters far more here than perfect repositioning.
+    winFxResizeHandler = function () { fitCanvasToBox(canvas); };
+    window.addEventListener('resize', winFxResizeHandler);
+    window.addEventListener('orientationchange', winFxResizeHandler);
 
     function frame(now) {
       if (!winFxOn) return;
@@ -4446,7 +4467,14 @@ Wherever the signal was going, you're already there.
     requestAnimationFrame(frame);
   }
 
-  function stopWinFX() { winFxOn = false; }
+  function stopWinFX() {
+    winFxOn = false;
+    if (winFxResizeHandler) {
+      window.removeEventListener('resize', winFxResizeHandler);
+      window.removeEventListener('orientationchange', winFxResizeHandler);
+      winFxResizeHandler = null;
+    }
+  }
 
   function showWinScreen() {
     const scr = $('winscreen');
@@ -4668,12 +4696,12 @@ Wherever the signal was going, you're already there.
   // Looping ambient background for the menu: tentacles breathing up and
   // down (not resolving like the ending's do) plus small drifting sparks.
   let menuFxOn = false;
+  let menuFxResizeHandler = null;
 
   function startMenuFX() {
     const canvas = $('menufx');
     const ctx = canvas.getContext('2d');
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    fitCanvasToBox(canvas);
 
     const glowX = canvas.width * 0.5;
     const glowY = canvas.height * 0.46;
@@ -4746,6 +4774,23 @@ Wherever the signal was going, you're already there.
     let last = start;
     let sparkTimer = 0;
     menuFxOn = true;
+
+    // The menu can sit open for a long time, so unlike the ending's
+    // resize handler (buffer-only, see startWinFX) a rotation/toolbar
+    // change here gets a full restart — cheap, since this is all ambient
+    // background with no continuity to preserve, and it re-derives every
+    // position as a fresh proportion of the new box instead of drifting.
+    if (!menuFxResizeHandler) {
+      let menuFxResizeTimer = null;
+      menuFxResizeHandler = function () {
+        clearTimeout(menuFxResizeTimer);
+        menuFxResizeTimer = setTimeout(function () {
+          if (menuFxOn) startMenuFX();
+        }, 150);
+      };
+      window.addEventListener('resize', menuFxResizeHandler);
+      window.addEventListener('orientationchange', menuFxResizeHandler);
+    }
 
     function frame(now) {
       if (!menuFxOn) return;
