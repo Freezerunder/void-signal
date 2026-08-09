@@ -1167,7 +1167,17 @@ Wherever the signal was going, you're already there.
     { id: 'c3',  name: 'Compulsive',       d: 'Open 100 chests',           c: function (S) { return S.chests >= 100; } },
     { id: 'c4',  name: 'Should Have Known',d: 'Open a chest that was not one', c: function (S) { return S.chestBad >= 1; } },
     { id: 'c5',  name: 'Never Learns',     d: 'Ruin yourself on 20 chests', c: function (S) { return S.chestBad >= 20; } },
-    { id: 'c6',  name: 'Well Stocked',     d: 'Open 250 chests',           c: function (S) { return S.chests >= 250; } }
+    { id: 'c6',  name: 'Well Stocked',     d: 'Open 250 chests',           c: function (S) { return S.chests >= 250; } },
+    { id: 'c7',  name: 'Chest Historian',  d: 'Open 500 chests',           c: function (S) { return S.chests >= 500; } },
+
+    // ---------------------------------------------------------------- more
+    { id: 'a27', name: 'Regular Customer', d: 'Buy 25 Store items',        c: function (S) { return S.storeBuys >= 25; } },
+    { id: 'a28', name: 'Long Shift',       d: 'Play for 5 hours',          c: function (S) { return S.playtime >= 18000; } },
+    { id: 'a29', name: 'Deep Reserve',     d: 'Hold 500 Echoes',           c: function (S) { return S.echoes >= 500; } },
+    { id: 'h14', name: 'Master Of The Dark', d: 'Go dark 50 times',        c: function (S) { return S.goDarks >= 50; } },
+    { id: 'h15', name: 'Eye Contact',      d: 'Click the Watcher 25 times', c: function (S) { return S.watchers >= 25; } },
+    { id: 'd24', name: 'Beyond Tenure',    d: 'Reach level 150',           c: function (S) { return S.level >= 150; } },
+    { id: 'd25', name: 'Saturation Point', d: 'Own 2,500 antennas',        c: function (S) { return totalGens(S) >= 2500; } }
   ];
 
   // Meta-achievements: shown on the title screen, not the in-run Discoveries
@@ -1338,7 +1348,7 @@ Wherever the signal was going, you're already there.
       goodEvents: 0, badEvents: 0,
       level: 1, darkSpent: 0, finished: false, diedBelow5: false, diedAt199: false,
       chests: 0, chestGood: 0, chestBad: 0,
-      watchers: 0,
+      watchers: 0, storeBuys: 0,
       playtime: 0, best: 0,
       started: Date.now(), lastSave: Date.now(),
       buy: 1, muted: false
@@ -2181,6 +2191,17 @@ Wherever the signal was going, you're already there.
       const v = S.total * 0.01 * mods.chestMul;
       grantSignal(v);
       return 'A ledger in your own handwriting, older than you are. It kept a fraction of everything aside. +' + fmt(v) + ' signal.';
+    },
+    function () {
+      addFX('click', 8, 60000, 'Borrowed hands ×8', true);
+      return 'A pair of gloves, still warm, still moving slightly. The next minute of pings land like eight hands did the work.';
+    },
+    function () {
+      const g = ownedGens();
+      if (!g.length) { const v = clickValue() * 250 * mods.chestMul; grantSignal(v); return 'A crate of spare parts with no antenna to attach to yet. ' + fmt(v) + ' signal.'; }
+      const t = pick(g);
+      S.gens[t.id] += Math.max(2, Math.ceil(S.gens[t.id] * 0.15));
+      return 'Someone already assembled the paperwork. More ' + t.name + 's than you ordered, and no invoice.';
     }
   ];
 
@@ -2238,6 +2259,16 @@ Wherever the signal was going, you're already there.
       addFX('prod', 0.1, 60000, 'Almost silence', false);
       addDread(15);
       return 'It is not empty. It is loud, but not in a frequency anything alive can hear. The array goes almost silent for a minute. (+15 dread)';
+    },
+    function () {
+      const loss = loseSignalPct(0.2);
+      addDread(14);
+      return 'It is full of your own handwriting, apologising in advance. ' + fmt(loss) + ' signal gone before you finish reading it. (+14 dread)';
+    },
+    function () {
+      addFX('click', 0.2, 40000, 'Borrowed hands, taken back', false);
+      addDread(12);
+      return 'The gloves from last time. They want to be returned, apparently. Pings barely register for forty seconds. (+12 dread)';
     }
   ];
 
@@ -2554,6 +2585,29 @@ Wherever the signal was going, you're already there.
         log('A door at the end of the corridor opens by itself and something walks out with ' + fmt(loss) + ' of your signal.', 'bad');
         shake();
       } },
+    { good: true, run: function () {
+        addFX('prod', 2.2, 75000, 'Tailwind ×2.2', true);
+        log('The band clears all at once, top to bottom. Everything you point at answers early.');
+      } },
+    { good: true, run: function () {
+        const v = perSecond() * 240 + clickValue() * 30;
+        grantSignal(v);
+        log('A satellite you do not own dumps its overflow buffer into your feed by mistake — ' + fmt(v) + ' signal.');
+      } },
+    { good: false, run: function () {
+        addDread(17);
+        addFX('click', 0.5, 40000, 'Flinching', false);
+        log('Every ping comes back a half-second early, like something answered before you asked.', 'bad');
+      } },
+    { good: false, run: function () {
+        const g = ownedGens();
+        if (!g.length) { addDread(9); log('Cold settles into the empty rack where an antenna should be.', 'bad'); return; }
+        const t = pick(g);
+        FX.push({ kind: 'disable', gen: t.id, until: Date.now() + 75000,
+                  label: t.name + ' offline', good: false });
+        addDread(5);
+        log('Every ' + t.name + ' goes cold at once, like it heard something it did not like.', 'bad');
+      } },
 
     // ------------------------------------------------------- with a choice
     { choice: true, run: function () {
@@ -2657,6 +2711,30 @@ Wherever the signal was going, you're already there.
               } }
           ],
           onTimeout: function () { addDread(10); log('You leave it be. In the morning it has moved six inches closer.', 'bad'); }
+        });
+      } },
+
+    { choice: true, run: function () {
+        openEncounter({
+          kicker: 'ANOMALY', title: 'A Second Logbook',
+          text: 'Under the real logbook is another one, in your handwriting, for shifts you have not ' +
+                'worked yet. The most recent entry is dated tomorrow, and it is already half full.',
+          timeout: 22000,
+          options: [
+            { label: 'Read ahead', danger: true, hint: 'Learn what happens. High dread.',
+              run: function () {
+                const v = perSecond() * 500 + clickValue() * 80;
+                grantSignal(v);
+                addDread(20);
+                log('You read tomorrow\'s entry and do exactly what it says, ' + fmt(v) + ' signal ahead of schedule. It matches perfectly.', 'bad');
+              } },
+            { label: 'Burn today\'s page before it is written', hint: '−10 dread · −15% signal',
+              run: function () {
+                addDread(-10); loseSignalPct(0.15);
+                log('You burn the page. Tomorrow\'s logbook is one entry shorter now. You hope that means something.');
+              } }
+          ],
+          onTimeout: function () { addDread(8); log('You close both books. Tomorrow\'s handwriting gets a little more confident.', 'bad'); }
         });
       } }
   ];
@@ -3208,6 +3286,89 @@ Wherever the signal was going, you're already there.
               log('It goes without arguing, which is somehow worse than if it had.');
             } }
         ];
+      } },
+
+    { glyph: '📋', name: 'The Signal Auditor',
+      text: 'She has a clipboard and a very old badge and says she is here to reconcile the books. ' +
+            'Her numbers for your station go back further than the station has existed.',
+      opts: function () {
+        return [
+          { label: 'Let her reconcile the books', gold: true, hint: '+2 Echoes · −20% signal',
+            run: function () {
+              loseSignalPct(0.2); S.echoes += 2; S.accepted++;
+              log('She balances the ledger and signs it with a name that is almost yours.');
+            } },
+          { label: 'Ask what she is really counting', hint: 'Double an antenna type · +14 dread',
+            run: function () {
+              addDread(14); S.accepted++;
+              const g = ownedGens();
+              if (!g.length) { grantSignal(clickValue() * 80); log('She counts your hands instead, and pays you for them.'); return; }
+              const t = pick(g);
+              S.gens[t.id] *= 2;
+              log('"Not signal," she says, and keeps writing. There are twice as many ' + t.name + 's when she leaves.');
+            } }
+        ];
+      } },
+
+    { glyph: '🎧', name: 'The Night Operator',
+      text: 'He works the graveyard shift at a station that does not appear on the relay map. He offers ' +
+            'to trade frequencies — his quiet hours for some of your noise, or the reverse.',
+      opts: function () {
+        return [
+          { label: 'Trade him your noise', hint: '−25 dread · −20% signal',
+            run: function () {
+              addDread(-25); loseSignalPct(0.2); S.accepted++;
+              log('For a while the two stations sound like each other. Yours is the quieter one, for once.');
+            } },
+          { label: 'Take his quiet hours', danger: true, hint: 'Production ×4 for 2m · +20 dread',
+            run: function () {
+              addFX('prod', 4, 120000, 'Borrowed quiet ×4', true); addDread(20); S.accepted++;
+              log('You take his shift. The dish runs loud and fast in hours that are supposed to be empty.', 'bad');
+            } }
+        ];
+      } },
+
+    { glyph: '📐', name: 'The Surveyor',
+      text: 'He has been mapping unclaimed frequencies for longer than the station has had a roof, and ' +
+            'he is willing to sign a stretch of sky over to you. He wants the deed signed in something ' +
+            'other than ink.',
+      opts: function () {
+        return [
+          { label: 'Sign it', gold: true, hint: '+40% of an antenna type · +16 dread',
+            run: function () {
+              addDread(16); S.accepted++;
+              const g = ownedGens();
+              if (!g.length) { grantSignal(clickValue() * 120); log('There is nothing yet to survey. He leaves you seed money instead.'); return; }
+              const t = pick(g);
+              S.gens[t.id] += Math.max(1, Math.ceil(S.gens[t.id] * 0.4));
+              log('You sign. Somewhere a stretch of empty sky becomes yours, and ' + t.name + 's follow the paperwork.');
+            } },
+          { label: 'Ask for the ink option', hint: '−15% signal · −6 dread',
+            run: function () {
+              loseSignalPct(0.15); addDread(-6); S.refused++;
+              log('He accepts ordinary payment, looking almost disappointed on your behalf.');
+            } }
+        ];
+      } },
+
+    { glyph: '🎼', name: 'The Choir In The Static', dread: 62, dreadful: true,
+      text: 'It arrives as overlapping voices tuned a quarter-step apart, all of them trying to sing the ' +
+            'same hymn in time with the dread drone. It offers to teach the array the harmony, or to be ' +
+            'told, once, firmly, to stop.',
+      opts: function () {
+        return [
+          { label: 'Let it teach the harmony', danger: true, hint: 'Production ×9 for 90s · +32 dread',
+            run: function () {
+              addFX('prod', 9, 90000, 'The choir ×9', true); addDread(32); S.accepted++;
+              log('Every dish learns the hymn at once. It is beautiful, and it does not stop when the ninety seconds do.', 'bad');
+              shake();
+            } },
+          { label: 'Tell it to stop', hint: '−28 dread · −1 Echo',
+            run: function () {
+              addDread(-28); S.echoes = Math.max(0, S.echoes - 1); S.refused++;
+              log('It stops mid-note. The silence after is worse than the singing, but it is yours again.');
+            } }
+        ];
       } }
   ];
 
@@ -3421,6 +3582,7 @@ Wherever the signal was going, you're already there.
     if (S.signal < cost) { blip(140, 0.06, 'sawtooth'); return; }
     S.signal -= cost;
     storeCooldown[item.id] = now + item.cooldown;
+    S.storeBuys++;
     item.buy();
     recompute();
     refreshLists();
