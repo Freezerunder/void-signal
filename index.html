@@ -3912,6 +3912,16 @@ Wherever the signal was going, you're already there.
   // instead of quietly resurrecting the save it just erased.
   let gameRunning = true;
 
+  // True while any full-screen narrative beat (menu/intro/death/win) is
+  // showing — gates spawns below so travellers/events/chests/the Watcher
+  // never interrupt a cutscene the player is mid-read on.
+  function storyScreenOpen() {
+    return ['menuscreen', 'introscreen', 'deathscreen', 'winscreen'].some(function (id) {
+      const el = $(id);
+      return el && el.classList.contains('on');
+    });
+  }
+
   function frame(now) {
     if (!gameRunning) return;
     if (!last) last = now;
@@ -3947,14 +3957,20 @@ Wherever the signal was going, you're already there.
     }
 
     // carrier waves, events, travellers
+    // Nothing below should spawn on top of a cutscene (menu/intro/death/win) —
+    // it can interrupt the player mid-read. Scheduling still advances; only
+    // the actual spawn/fire is held back, so it fires right after the
+    // screen closes instead of being lost or double-queued.
+    const cutsceneOpen = storyScreenOpen();
+
     if (!nextWave) scheduleWave();
-    if (S.level >= 5 && Date.now() >= nextWave) { spawnWave(); scheduleWave(); }
+    if (S.level >= 5 && !cutsceneOpen && Date.now() >= nextWave) { spawnWave(); scheduleWave(); }
 
     if (!nextChest) scheduleChest();
-    if (S.level >= 5 && noticed() && !DEV.noChests && Date.now() >= nextChest) { spawnChest(); scheduleChest(); }
+    if (S.level >= 5 && noticed() && !DEV.noChests && !cutsceneOpen && Date.now() >= nextChest) { spawnChest(); scheduleChest(); }
 
     if (!nextWatcher) scheduleWatcher();
-    if (S.level >= 5 && noticed() && !DEV.noWatcher && Date.now() >= nextWatcher) { spawnWatcher(); scheduleWatcher(); }
+    if (S.level >= 5 && noticed() && !DEV.noWatcher && !cutsceneOpen && Date.now() >= nextWatcher) { spawnWatcher(); scheduleWatcher(); }
 
     if (!noticed()) {
       // beneath notice: keep pushing the clocks forward so nothing fires
@@ -3963,8 +3979,8 @@ Wherever the signal was going, you're already there.
       scheduleChest();
       scheduleWatcher();
     } else {
-      if (S.level >= 5 && !DEV.noEvents && Date.now() >= nextEvent) { fireEvent(); scheduleEvent(); }
-      if (S.level >= 5 && !DEV.noTravellers && Date.now() >= nextTraveller && !encounterOpen) {
+      if (S.level >= 5 && !DEV.noEvents && !cutsceneOpen && Date.now() >= nextEvent) { fireEvent(); scheduleEvent(); }
+      if (S.level >= 5 && !DEV.noTravellers && Date.now() >= nextTraveller && !encounterOpen && !cutsceneOpen) {
         fireTraveller(); scheduleTraveller();
       }
     }
