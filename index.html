@@ -814,7 +814,7 @@ Wherever the signal was going, you're already there.
 
 — END OF TRANSMISSION —
   </div>
-  <div class="story-prompt">Click to keep listening anyway</div>
+  <div class="story-prompt">Click to step back from the array</div>
 </div>
 
 <script>
@@ -1559,21 +1559,14 @@ Wherever the signal was going, you're already there.
     try { ambientGain.gain.setTargetAtTime(target, audio.currentTime, 4); } catch (e) {}
   }
 
-  // A warm, original ambient piece for the ending, in the spirit of a slow
-  // filtered dream-house swell (think Innerbloom-adjacent, not a cover of
-  // it) — ducks the dread drone and horror bed out, breathes through a
-  // slowly sweeping lowpass filter, carries a felt-more-than-heard sub
-  // pulse underneath, and lets a sparse arpeggio trail off into its own
-  // feedback delay instead of playing dry. The pad also drifts through a
-  // slow four-chord progression (I-vi-IV-V) instead of holding one static
-  // chord, so it actually has harmonic movement to listen to.
+  // A warm, original ambient pad for the ending — just the swelling
+  // filtered chord bed and a felt-more-than-heard sub pulse, no melodic
+  // arpeggio (user tried it and asked to cut it, keep the ambient part).
+  // Ducks the dread drone and horror bed out, breathes through a slowly
+  // sweeping lowpass filter, and drifts through a slow four-chord
+  // progression (I-vi-IV-V) instead of holding one static chord.
   const HEAVENLY_PAD_TARGET = 0.28;
   const HEAVENLY_SUB_TARGET = 0.1;
-  // deliberately quieter than the pad — previously the echoed arpeggio
-  // (0.5) was nearly double the pad (0.26), so for most of the ending the
-  // arpeggio was the loudest thing in the mix and the pad barely
-  // registered; that's the literal reason it read as "just arpeggios."
-  const HEAVENLY_ECHO_TARGET = 0.16;
   const HEAVENLY_CHORDS = [
     [130.81, 164.81, 196.00, 261.63, 329.63, 392.00], // I   (C E G C E G)
     [110.00, 130.81, 164.81, 220.00, 261.63, 329.63], // vi  (A C E A C E)
@@ -1586,7 +1579,6 @@ Wherever the signal was going, you're already there.
     const on = !S.muted;
     try { heavenly.padGain.gain.setTargetAtTime(on ? HEAVENLY_PAD_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
     try { heavenly.subGain.gain.setTargetAtTime(on ? HEAVENLY_SUB_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
-    try { heavenly.echoOut.gain.setTargetAtTime(on ? HEAVENLY_ECHO_TARGET * SETTINGS.volume : 0, audio.currentTime, 1.2); } catch (e) {}
   }
 
   function playHeavenlyMusic() {
@@ -1647,46 +1639,9 @@ Wherever the signal was going, you're already there.
     sub.start();
     if (!S.muted) subGain.gain.setTargetAtTime(HEAVENLY_SUB_TARGET * SETTINGS.volume, audio.currentTime, 2.5);
 
-    // a feedback delay bus just for the arpeggio, so notes trail off into a
-    // hazy echo instead of playing dry against the pad
-    const delay = audio.createDelay(2.0);
-    delay.delayTime.value = 0.42;
-    const feedback = audio.createGain();
-    feedback.gain.value = 0.42;
-    const echoFilt = audio.createBiquadFilter();
-    echoFilt.type = 'lowpass'; echoFilt.frequency.value = 2200;
-    const echoOut = audio.createGain();
-    echoOut.gain.value = S.muted ? 0 : HEAVENLY_ECHO_TARGET * SETTINGS.volume;
-    delay.connect(feedback); feedback.connect(echoFilt); echoFilt.connect(delay);
-    delay.connect(echoOut); echoOut.connect(audio.destination);
-
-    const arpNotes = [523.25, 659.25, 784.00, 987.77, 784.00, 659.25, 1046.5, 784.00]; // C E G B G E C B
-    let ai = 0;
-    let arpTimer = null;
-    // hold off on the arpeggio for a few seconds so the pad has time to
-    // swell in first — starting both at once let the (comparatively
-    // percussive, present) arpeggio dominate before the pad ever
-    // established itself.
-    const arpStartTimeout = setTimeout(function () {
-      arpTimer = setInterval(function () {
-        const freq = arpNotes[ai % arpNotes.length];
-        ai++;
-        if (S.muted) return;
-        const o = audio.createOscillator(), g = audio.createGain();
-        o.type = 'sine'; o.frequency.value = freq;
-        g.gain.setValueAtTime(0.0001, audio.currentTime);
-        g.gain.linearRampToValueAtTime(0.04 * SETTINGS.volume, audio.currentTime + 0.4);
-        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2.2);
-        o.connect(g); g.connect(audio.destination); g.connect(delay);
-        o.start(); o.stop(audio.currentTime + 2.3);
-      }, 1800);
-      if (heavenly) heavenly.arpTimer = arpTimer;
-    }, 3000);
-
     heavenly = {
-      padGain: padGain, oscs: oscs, arpTimer: arpTimer, arpStartTimeout: arpStartTimeout, chordTimer: chordTimer,
-      filtLfo: filtLfo, sub: sub, subGain: subGain,
-      delay: delay, feedback: feedback, echoOut: echoOut
+      padGain: padGain, oscs: oscs, chordTimer: chordTimer,
+      filtLfo: filtLfo, sub: sub, subGain: subGain
     };
   }
 
@@ -1694,13 +1649,10 @@ Wherever the signal was going, you're already there.
     if (!heavenly) return;
     const h = heavenly;
     heavenly = null;
-    clearInterval(h.arpTimer);
-    clearTimeout(h.arpStartTimeout);
     clearInterval(h.chordTimer);
     try {
       h.padGain.gain.setTargetAtTime(0, audio.currentTime, 2);
       h.subGain.gain.setTargetAtTime(0, audio.currentTime, 2);
-      h.echoOut.gain.setTargetAtTime(0, audio.currentTime, 2);
       setTimeout(function () {
         h.oscs.forEach(function (o) { try { o.stop(); } catch (e) {} });
         try { h.filtLfo.stop(); } catch (e) {}
@@ -3139,6 +3091,14 @@ Wherever the signal was going, you're already there.
   // ================================================================= contact
 
   function contact() {
+    // frame() calls contact() every tick while S.dread >= 100. The
+    // non-hardcore path resets dread below 100 before returning, so that's
+    // naturally a one-shot — but the hardcore path doesn't lower dread
+    // until the player actually dismisses the modal, so without this
+    // guard every frame between dread hitting 100 and that click would
+    // re-run the flourish and queue up another duplicate death modal,
+    // which then played back one after another after the first dismissal.
+    if (encounterOpen) return;
     showDeathFlourish();
     if (S.level < 5) S.diedBelow5 = true;
     if (S.level === 199) S.diedAt199 = true;
@@ -4476,14 +4436,26 @@ Wherever the signal was going, you're already there.
     const scr = $('winscreen');
     scr.classList.remove('reveal-text');
     scr.classList.add('on');
+    // the ending is a fixed cutscene, not something the live sim needs to
+    // keep running underneath it — pausing it here also fixes a real
+    // stutter: frame() was still redrawing 4 separate HUD canvases every
+    // tick behind the (opaque) win screen for the whole ~15s animation,
+    // doubling the per-frame canvas work against startWinFX's own loop.
+    gameRunning = false;
     startWinFX();
     playHeavenlyMusic();
     const revealTimer = setTimeout(function () { scr.classList.add('reveal-text'); }, WIN_TEXT_DELAY_MS);
     scr.addEventListener('click', function () {
-      scr.classList.remove('on');
       clearTimeout(revealTimer);
       stopWinFX();
       stopHeavenlyMusic();
+      // build the menu underneath first (its own opacity transition is
+      // instant, see #menuscreen's `transition: none`) while the win
+      // screen is still fully opaque on top, then fade the win screen
+      // away to reveal it — same ordering principle as chooseSlot()'s
+      // intro handoff, so the raw game never flashes through mid-fade.
+      showMenu();
+      scr.classList.remove('on');
     }, { once: true });
   }
 
