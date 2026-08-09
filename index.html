@@ -1564,10 +1564,22 @@ Wherever the signal was going, you're already there.
   // it) — ducks the dread drone and horror bed out, breathes through a
   // slowly sweeping lowpass filter, carries a felt-more-than-heard sub
   // pulse underneath, and lets a sparse arpeggio trail off into its own
-  // feedback delay instead of playing dry.
-  const HEAVENLY_PAD_TARGET = 0.26;
+  // feedback delay instead of playing dry. The pad also drifts through a
+  // slow four-chord progression (I-vi-IV-V) instead of holding one static
+  // chord, so it actually has harmonic movement to listen to.
+  const HEAVENLY_PAD_TARGET = 0.28;
   const HEAVENLY_SUB_TARGET = 0.1;
-  const HEAVENLY_ECHO_TARGET = 0.5;
+  // deliberately quieter than the pad — previously the echoed arpeggio
+  // (0.5) was nearly double the pad (0.26), so for most of the ending the
+  // arpeggio was the loudest thing in the mix and the pad barely
+  // registered; that's the literal reason it read as "just arpeggios."
+  const HEAVENLY_ECHO_TARGET = 0.16;
+  const HEAVENLY_CHORDS = [
+    [130.81, 164.81, 196.00, 261.63, 329.63, 392.00], // I   (C E G C E G)
+    [110.00, 130.81, 164.81, 220.00, 261.63, 329.63], // vi  (A C E A C E)
+    [87.31, 110.00, 130.81, 174.61, 220.00, 261.63],  // IV  (F A C F A C)
+    [98.00, 123.47, 146.83, 196.00, 246.94, 293.66]   // V   (G B D G B D)
+  ];
 
   function updateHeavenlyLevels() {
     if (!heavenly) return;
@@ -1601,18 +1613,31 @@ Wherever the signal was going, you're already there.
     padGain.gain.value = 0;
     padGain.connect(padFilt); padFilt.connect(audio.destination);
 
-    const chord = [130.81, 164.81, 196.00, 261.63, 329.63, 392.00]; // C E G C E G, wide and warm
-    const oscs = chord.map(function (freq) {
+    const detunes = HEAVENLY_CHORDS[0].map(function () { return 1 + (Math.random() - 0.5) * 0.004; }); // faint per-voice detune, chorus-like warmth
+    const oscs = HEAVENLY_CHORDS[0].map(function (freq, i) {
       const o = audio.createOscillator(), g = audio.createGain(), filt = audio.createBiquadFilter();
       o.type = 'sine';
-      o.frequency.value = freq * (1 + (Math.random() - 0.5) * 0.004); // faint per-voice detune, chorus-like warmth
+      o.frequency.value = freq * detunes[i];
       filt.type = 'lowpass'; filt.frequency.value = 1400;
       g.gain.value = 0.2;
       o.connect(filt); filt.connect(g); g.connect(padGain);
       o.start();
       return o;
     });
-    if (!S.muted) padGain.gain.setTargetAtTime(HEAVENLY_PAD_TARGET * SETTINGS.volume, audio.currentTime, 4.5);
+    // fast swell (was a 4.5s time constant — took ~13s to fully settle,
+    // longer than most of the ending animation, so the pad was still
+    // quiet right when it needed to be established) plus a slow chord
+    // progression so the pad actually moves instead of holding one note
+    // forever.
+    if (!S.muted) padGain.gain.setTargetAtTime(HEAVENLY_PAD_TARGET * SETTINGS.volume, audio.currentTime, 1.5);
+    let chordIdx = 0;
+    const chordTimer = setInterval(function () {
+      chordIdx = (chordIdx + 1) % HEAVENLY_CHORDS.length;
+      const target = HEAVENLY_CHORDS[chordIdx];
+      oscs.forEach(function (o, i) {
+        o.frequency.linearRampToValueAtTime(target[i] * detunes[i], audio.currentTime + 6);
+      });
+    }, 9000);
 
     // a sub pulse, low enough to feel rather than hear — gives the pad weight
     const sub = audio.createOscillator(), subGain = audio.createGain();
@@ -1620,7 +1645,7 @@ Wherever the signal was going, you're already there.
     subGain.gain.value = 0;
     sub.connect(subGain); subGain.connect(audio.destination);
     sub.start();
-    if (!S.muted) subGain.gain.setTargetAtTime(HEAVENLY_SUB_TARGET * SETTINGS.volume, audio.currentTime, 5);
+    if (!S.muted) subGain.gain.setTargetAtTime(HEAVENLY_SUB_TARGET * SETTINGS.volume, audio.currentTime, 2.5);
 
     // a feedback delay bus just for the arpeggio, so notes trail off into a
     // hazy echo instead of playing dry against the pad
@@ -1637,21 +1662,29 @@ Wherever the signal was going, you're already there.
 
     const arpNotes = [523.25, 659.25, 784.00, 987.77, 784.00, 659.25, 1046.5, 784.00]; // C E G B G E C B
     let ai = 0;
-    const arpTimer = setInterval(function () {
-      const freq = arpNotes[ai % arpNotes.length];
-      ai++;
-      if (S.muted) return;
-      const o = audio.createOscillator(), g = audio.createGain();
-      o.type = 'sine'; o.frequency.value = freq;
-      g.gain.setValueAtTime(0.0001, audio.currentTime);
-      g.gain.linearRampToValueAtTime(0.05 * SETTINGS.volume, audio.currentTime + 0.4);
-      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2.2);
-      o.connect(g); g.connect(audio.destination); g.connect(delay);
-      o.start(); o.stop(audio.currentTime + 2.3);
-    }, 1800);
+    let arpTimer = null;
+    // hold off on the arpeggio for a few seconds so the pad has time to
+    // swell in first — starting both at once let the (comparatively
+    // percussive, present) arpeggio dominate before the pad ever
+    // established itself.
+    const arpStartTimeout = setTimeout(function () {
+      arpTimer = setInterval(function () {
+        const freq = arpNotes[ai % arpNotes.length];
+        ai++;
+        if (S.muted) return;
+        const o = audio.createOscillator(), g = audio.createGain();
+        o.type = 'sine'; o.frequency.value = freq;
+        g.gain.setValueAtTime(0.0001, audio.currentTime);
+        g.gain.linearRampToValueAtTime(0.04 * SETTINGS.volume, audio.currentTime + 0.4);
+        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 2.2);
+        o.connect(g); g.connect(audio.destination); g.connect(delay);
+        o.start(); o.stop(audio.currentTime + 2.3);
+      }, 1800);
+      if (heavenly) heavenly.arpTimer = arpTimer;
+    }, 3000);
 
     heavenly = {
-      padGain: padGain, oscs: oscs, arpTimer: arpTimer,
+      padGain: padGain, oscs: oscs, arpTimer: arpTimer, arpStartTimeout: arpStartTimeout, chordTimer: chordTimer,
       filtLfo: filtLfo, sub: sub, subGain: subGain,
       delay: delay, feedback: feedback, echoOut: echoOut
     };
@@ -1662,6 +1695,8 @@ Wherever the signal was going, you're already there.
     const h = heavenly;
     heavenly = null;
     clearInterval(h.arpTimer);
+    clearTimeout(h.arpStartTimeout);
+    clearInterval(h.chordTimer);
     try {
       h.padGain.gain.setTargetAtTime(0, audio.currentTime, 2);
       h.subGain.gain.setTargetAtTime(0, audio.currentTime, 2);
@@ -4062,17 +4097,19 @@ Wherever the signal was going, you're already there.
   // far better than anything that tries to look literal at this scale.
   let winFxOn = false;
 
-  // Ending timeline (seconds): a held black beat, then the spark drops from
-  // the top into tendril territory, struggles at the bottom, and is caught
-  // and pulled back up by a hand of light reaching down from a "heavenly
-  // sight" above. Shared with showWinScreen()'s text-reveal delay so the
-  // ending copy doesn't fade in over top of the animation.
-  const WIN_T_BLACK = 1.6;
-  const WIN_T_FALL = 2.6;
-  const WIN_T_PULL = 1.3;
-  const WIN_T_HOLD = 0.6;
-  const WIN_T_GRAB = 0.9;
-  const WIN_T_RISE = 3.4;
+  // Ending timeline (seconds): a held black beat, then the spark slowly
+  // rises up out of the depths — that's when the tendrils notice it and
+  // seize it, dragging it back down into a struggle, before a hand of
+  // light reaches down from a "heavenly sight" above, catches it, and
+  // carries it home. Shared with showWinScreen()'s text-reveal delay so
+  // the ending copy doesn't fade in over top of the animation.
+  const WIN_T_BLACK = 2.0;
+  const WIN_T_FALL = 3.6;      // the rise from the depths (name kept for fewer call-site renames)
+  const WIN_T_PULL = 2.0;
+  const WIN_T_HOLD = 1.4;
+  const WIN_T_SNAP = 0.2;      // the two grippers' own fast attack, decoupled from the slower overall drag
+  const WIN_T_GRAB = 1.1;
+  const WIN_T_RISE = 4.6;
   const WIN_TEXT_DELAY_MS = (WIN_T_BLACK + WIN_T_FALL + WIN_T_PULL + WIN_T_HOLD + WIN_T_GRAB + WIN_T_RISE + 0.6) * 1000;
 
   function easeOutCubic(k) { return 1 - Math.pow(1 - k, 3); }
@@ -4139,17 +4176,20 @@ Wherever the signal was going, you're already there.
     canvas.height = window.innerHeight;
     const cx = canvas.width / 2;
     const topY = canvas.height * 0.12;
-    const lowY = canvas.height * 0.8;      // where the fall lands
-    const pullY = canvas.height * 0.94;    // dragged deeper once tendrils grip it
+    const depthY = canvas.height * 1.1;    // starts below the visible bottom edge, still in the depths
+    const riseApexY = canvas.height * 0.5; // how high it rises before the tendrils reach it — inside their territory
+    const pullY = canvas.height * 0.94;    // dragged back down once tendrils grip it
     const restY = canvas.height * 0.18;
     const catchY = pullY - (pullY - restY) * 0.18;
 
-    // tFall: the drop lands here. tPullEnd: tendrils have finished hauling
-    // it down to pullY. tGrabStart/tGrabEnd: the hand catches it and lifts
-    // it clear of the pullY depth. tRiseEnd: carried the rest of the way home.
-    const tFall = WIN_T_BLACK;
-    const tLand = tFall + WIN_T_FALL;
-    const tPullEnd = tLand + WIN_T_PULL;
+    // tRiseStart: the spark begins rising from the depths here. tApex: the
+    // rise peaks, right where the tendrils seize it. tPullEnd: tendrils
+    // have finished hauling it back down to pullY. tGrabStart/tGrabEnd:
+    // the hand catches it and lifts it clear of the pullY depth. tRiseEnd:
+    // carried the rest of the way home.
+    const tRiseStart = WIN_T_BLACK;
+    const tApex = tRiseStart + WIN_T_FALL;
+    const tPullEnd = tApex + WIN_T_PULL;
     const tGrabStart = tPullEnd + WIN_T_HOLD;
     const tGrabEnd = tGrabStart + WIN_T_GRAB;
     const tRiseEnd = tGrabEnd + WIN_T_RISE;
@@ -4193,21 +4233,26 @@ Wherever the signal was going, you're already there.
 
       // orbY: where the spark is right now, piecewise across the timeline
       let orbY;
-      if (t < tFall) {
-        orbY = topY;
-      } else if (t < tLand) {
-        const k = Math.min(1, (t - tFall) / WIN_T_FALL);
-        orbY = topY + (k * k) * (lowY - topY);                     // real gravity — accelerates the whole way, no floaty ease-out
+      let riseK = 0; // 0..1 progress through the rise, reused below for nearness
+      if (t < tRiseStart) {
+        orbY = depthY;                                              // still down in the depths, not yet visible
+      } else if (t < tApex) {
+        riseK = Math.min(1, (t - tRiseStart) / WIN_T_FALL);
+        const e = easeOutCubic(riseK);                              // decelerating rise — reads as effort, not a launch
+        orbY = depthY + e * (riseApexY - depthY);
       } else if (t < tPullEnd) {
-        // momentum carries it past lowY at speed — tendrils catch it mid-fall
-        // and reel it the rest of the way down, decelerating smoothly into
-        // the struggle instead of the fall just stopping dead at lowY.
-        const k = Math.min(1, (t - tLand) / WIN_T_PULL);
+        // the tendrils seize it right at the top of its rise and reel it
+        // back down past pullY, decelerating smoothly into the struggle
+        // instead of stopping dead.
+        const k = Math.min(1, (t - tApex) / WIN_T_PULL);
         const e = easeOutCubic(k);
-        const wobble = Math.sin(t * 10) * 4 * (1 - e);             // resisting at first, settling as the grip wins
-        orbY = lowY + e * (pullY - lowY) + wobble;
+        const wobble = Math.sin(t * 10) * 4 * (1 - e);              // resisting at first, settling as the grip wins
+        orbY = riseApexY + e * (pullY - riseApexY) + wobble;
       } else if (t < tGrabStart) {
-        orbY = pullY + Math.sin(t * 9) * 3;                        // fully gripped, struggling at the bottom
+        // fully gripped, thrashing at the bottom — two overlapping
+        // frequencies plus a slower irrational-ratio wobble so it reads as
+        // a struggle, not a metronome
+        orbY = pullY + Math.sin(t * 9) * 7 + Math.sin(t * 21.3) * 3 + Math.sin(t * 5.7) * 4;
       } else if (t < tGrabEnd) {
         const k = Math.min(1, (t - tGrabStart) / WIN_T_GRAB);
         orbY = pullY - easeOutCubic(k) * (pullY - catchY);         // the catch
@@ -4217,13 +4262,20 @@ Wherever the signal was going, you're already there.
       } else {
         orbY = restY;                                              // safe, at rest
       }
-      const orbVisible = t >= tFall;
+      const orbVisible = t >= tRiseStart;
       const orbX = cx + Math.sin(t * 0.8) * 10;
 
-      // how deep into tendril territory the spark currently is, measured
-      // against the deepest point (pullY) it gets dragged to — tendrils
-      // grip harder the closer it gets and release as it's pulled clear.
-      const nearness = Math.max(0, Math.min(1, (orbY - topY) / (pullY - topY)));
+      // how much the tendrils should be reaching for the spark right now.
+      // Gated on the rise phase rather than raw y-distance: the spark
+      // starts deep below pullY in y terms, so a plain distance formula
+      // would read as "already close" the instant the rise begins and
+      // every tendril would snap to a grip on frame one. Instead nearness
+      // stays at 0 for most of the ascent and only climbs as it actually
+      // arrives at the apex, then behaves normally (distance-based) for
+      // the rest of the sequence.
+      const nearness = t < tApex
+        ? Math.max(0, (riseK - 0.55) / 0.45)
+        : Math.max(0, Math.min(1, (orbY - topY) / (pullY - topY)));
 
       // screen darkness: fully black until the catch, then fades out as the
       // spark is carried to safety, revealing the light backdrop underneath
@@ -4264,25 +4316,28 @@ Wherever the signal was going, you're already there.
         const isGripper = grippers.has(tn);
 
         // target grip: nearness already climbs during the last part of the
-        // fall (it's just a function of orbY), so tendrils start reaching
-        // before it even lands. Once past landing, the two designated
-        // grippers clamp onto a firm hold that tracks nearness directly
-        // (not the timer-driven lunge) so the drag down reads as a
-        // deliberate haul; everything else just sways in the background.
+        // rise (it's just a function of orbY), so tendrils start reaching
+        // before it even reaches the apex. Once past the apex, the two
+        // designated grippers snap onto a firm hold fast (WIN_T_SNAP, not
+        // the slower overall drag) so the grab reads as a distinct event
+        // instead of a gradual clamp; everything else just sways/leans in
+        // the background.
         const ambient = lunge * nearness * proximity * 0.55;
         let targetReach;
-        if (t < tLand) {
+        if (t < tApex) {
           targetReach = ambient;
         } else if (isGripper) {
-          const gripK = Math.min(1, (t - tLand) / (WIN_T_PULL * 0.6));
+          const gripK = Math.min(1, (t - tApex) / WIN_T_SNAP);
           targetReach = t < tGrabEnd ? Math.max(ambient, gripK * nearness) : ambient;
         } else {
           targetReach = ambient;
         }
         // low-pass filter the grip instead of snapping to it directly —
-        // this is what makes tendrils ease off gradually as the hand
-        // pulls the spark away, rather than instantly popping back.
-        const lagRate = targetReach > tn.reachCur ? 7 : 1.8;
+        // fast on the way in (still reads as a snap since targetReach
+        // itself now jumps quickly via WIN_T_SNAP above) and slow on the
+        // way out, so tendrils ease off gradually as the hand pulls the
+        // spark away rather than instantly popping back.
+        const lagRate = targetReach > tn.reachCur ? 11 : 1.8;
         tn.reachCur += (targetReach - tn.reachCur) * Math.min(1, dt * lagRate);
         const reach = tn.reachCur;
 
@@ -4297,20 +4352,29 @@ Wherever the signal was going, you're already there.
         const c2y = by - restH * 0.74;
         const restTipY = by - restH;
 
+        // a subtle inward lean toward the spark, present even for tendrils
+        // that never become official grippers — without this, every
+        // non-gripper just sways in place regardless of how close the
+        // spark is, which reads as decorative background grass instead of
+        // something reacting to it.
+        const leanAmt = Math.min(0.5, nearness * proximity * 0.85);
+        const leanTipX = wobbleTipX + (orbX - wobbleTipX) * leanAmt;
+        const leanTipY = restTipY + (orbY - restTipY) * leanAmt * 0.6;
+
         // the tip approaches the orb's rim, not its center — otherwise it
         // dives underneath the bright core and the contact point vanishes.
         // once gripping hard it also curls/wriggles around that rim
         // instead of just touching it, to read as "wrapped around", not
         // "poking at."
         const orbRimR = 14;
-        const toOrbX = orbX - wobbleTipX, toOrbY = orbY - restTipY;
+        const toOrbX = orbX - leanTipX, toOrbY = orbY - leanTipY;
         const toOrbDist = Math.hypot(toOrbX, toOrbY) || 1;
         const rimX = orbX - (toOrbX / toOrbDist) * orbRimR;
         const rimY = orbY - (toOrbY / toOrbDist) * orbRimR;
         const wrapAmt = Math.max(0, reach - 0.45) / 0.55;
         const wrapAngle = t * 4.2 + tn.curlPhase;
-        const tipX = wobbleTipX + (rimX - wobbleTipX) * reach + Math.cos(wrapAngle) * 9 * wrapAmt;
-        const tipY = restTipY + (rimY - restTipY) * reach + Math.sin(wrapAngle) * 6 * wrapAmt;
+        const tipX = leanTipX + (rimX - leanTipX) * reach + Math.cos(wrapAngle) * 9 * wrapAmt;
+        const tipY = leanTipY + (rimY - leanTipY) * reach + Math.sin(wrapAngle) * 6 * wrapAmt;
         const midX = c1x + (c2x - c1x) * 0.5;
         const midY = c1y + (c2y - c1y) * 0.5 + (orbY - (c1y + (c2y - c1y) * 0.5)) * reach * 0.35;
 
@@ -4342,7 +4406,7 @@ Wherever the signal was going, you're already there.
 
       // a steady light above — the "heavenly sight" the hand reaches out
       // from, visible faintly even while the rest of the scene is black
-      const beaconT = Math.max(0, Math.min(1, (t - tFall) / (tGrabEnd - tFall)));
+      const beaconT = Math.max(0, Math.min(1, (t - tRiseStart) / (tGrabEnd - tRiseStart)));
       const beacon = ctx.createRadialGradient(cx, topY - 40, 0, cx, topY - 40, canvas.height * 0.22);
       beacon.addColorStop(0, 'rgba(255,250,235,' + (0.5 * beaconT).toFixed(3) + ')');
       beacon.addColorStop(1, 'rgba(255,250,235,0)');
@@ -4371,17 +4435,25 @@ Wherever the signal was going, you're already there.
           ctx.fill();
         });
         const head = trail[trail.length - 1];
+
+        // struggle flicker: while the tendrils have it, the spark visibly
+        // gutters instead of glowing steadily — two irregular sine rates
+        // multiplied together so the dimming pulses don't read as a
+        // metronome, floored so it dims but never fully blacks out.
+        const struggleT = (t >= tApex && t < tGrabEnd) ? nearness : 0;
+        const flicker = Math.max(0.35, 1 - struggleT * (0.3 + 0.22 * Math.abs(Math.sin(t * 16.3)) * Math.abs(Math.sin(t * 3.1))));
+
         // soft outer halo, then a bigger, brighter solid core
         ctx.beginPath();
-        ctx.fillStyle = 'rgba(255,244,214,0.35)';
+        ctx.fillStyle = 'rgba(255,244,214,' + (0.35 * flicker).toFixed(3) + ')';
         ctx.shadowColor = 'rgba(255,244,214,0.9)';
-        ctx.shadowBlur = 34;
+        ctx.shadowBlur = 34 * flicker;
         ctx.arc(head.x, head.y, 16, 0, Math.PI * 2);
         ctx.fill();
         ctx.beginPath();
-        ctx.fillStyle = '#fffaf0';
-        ctx.shadowBlur = 30;
-        ctx.arc(head.x, head.y, 9, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(255,250,240,' + flicker.toFixed(3) + ')';
+        ctx.shadowBlur = 30 * flicker;
+        ctx.arc(head.x, head.y, 9 * (0.85 + 0.15 * flicker), 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
       }
