@@ -355,7 +355,12 @@
   #deathscreen .story-text {
     font-size: 26px; letter-spacing: .28em; text-transform: uppercase;
     animation: flick 2.2s steps(1) infinite;
+    position: relative; z-index: 1;
   }
+  #deathfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+  #deathscreen.shake { animation: shake .4s ease; }
+  #deathscreen.flashwhite { background: #fff; }
+  #deathscreen.flashwhite .story-text { color: #000; }
   #winfx, #introfx { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
   #introscreen .story-prompt { opacity: 0; transition: opacity 1s ease; }
   #introscreen.reveal-text .story-prompt { opacity: .55; }
@@ -805,6 +810,7 @@
 </div>
 
 <div class="storyscreen dark" id="deathscreen">
+  <canvas id="deathfx"></canvas>
   <div class="story-text" id="deathtext">RETRYING…</div>
 </div>
 
@@ -4173,17 +4179,79 @@ Wherever the signal was going, you're already there.
     window.addEventListener('keydown', dismiss, { once: true });
   }
 
+  // A brief analog-glitch burst behind the current line — real bands/static
+  // when flashing is allowed, a calmer dim red wash otherwise so reduceFlash
+  // players still get *something* per beat, just not a strobe.
+  function drawDeathGlitch(ctx, canvas, intensity) {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (SETTINGS.reduceFlash) {
+      ctx.fillStyle = 'rgba(194,69,63,' + (0.05 * intensity).toFixed(3) + ')';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      return;
+    }
+    const bars = 3 + Math.floor(Math.random() * 4 * intensity);
+    for (let b = 0; b < bars; b++) {
+      const y = Math.random() * canvas.height;
+      const h = 2 + Math.random() * 16 * intensity;
+      const xOff = (Math.random() - 0.5) * 36 * intensity;
+      ctx.fillStyle = 'rgba(194,69,63,' + (0.1 + Math.random() * 0.2).toFixed(3) + ')';
+      ctx.fillRect(xOff, y, canvas.width, h);
+    }
+    const specks = Math.floor(140 * intensity);
+    for (let i = 0; i < specks; i++) {
+      ctx.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,0.08)' : 'rgba(194,69,63,0.12)';
+      ctx.fillRect(Math.random() * canvas.width, Math.random() * canvas.height, 1, 1);
+    }
+  }
+
+  function shakeEl(el) {
+    if (SETTINGS.reduceShake) return;
+    el.classList.remove('shake');
+    void el.offsetWidth;
+    el.classList.add('shake');
+  }
+
   function showDeathFlourish() {
     const scr = $('deathscreen'), el = $('deathtext');
-    const lines = ['RETRYING…', 'RETRYING…', 'CONNECTION FAILED.', 'YOU ARE BEING FORGOTTEN.'];
+    const canvas = $('deathfx');
+    const ctx = canvas.getContext('2d');
+    fitCanvasToBox(canvas);
+    // More beats and uneven timing than a flat interval — the pauses get
+    // longer as it goes, like the connection is actually degrading rather
+    // than a metronome ticking through a fixed set of captions.
+    const beats = [
+      { text: 'RETRYING…', hold: 480, freq: 60 },
+      { text: 'RETRYING…', hold: 420, freq: 56 },
+      { text: 'SIGNAL LOST.', hold: 560, freq: 48 },
+      { text: 'CONNECTION FAILED.', hold: 700, freq: 42 },
+      { text: 'SOMETHING PICKED UP.', hold: 900, freq: 34 },
+      { text: 'YOU ARE BEING FORGOTTEN.', hold: 1500, freq: 90 }
+    ];
     let i = 0;
-    el.textContent = lines[0];
     scr.classList.add('on');
-    const iv = setInterval(function () {
+
+    function playBeat() {
+      const beat = beats[i];
+      el.textContent = beat.text;
+      drawDeathGlitch(ctx, canvas, 0.35 + i * 0.14);
+      shakeEl(scr);
+      blip(beat.freq, i === beats.length - 1 ? 0.55 : 0.15, 'sawtooth', 0.07 + i * 0.012);
+      if (i === beats.length - 1 && !SETTINGS.reduceFlash) {
+        // one hard white-out sting right as the last line lands, then cut
+        scr.classList.add('flashwhite');
+        setTimeout(function () { scr.classList.remove('flashwhite'); }, 70);
+      }
       i++;
-      if (i < lines.length) { el.textContent = lines[i]; }
-      else { clearInterval(iv); scr.classList.remove('on'); }
-    }, 650);
+      if (i < beats.length) {
+        setTimeout(playBeat, beat.hold);
+      } else {
+        setTimeout(function () {
+          scr.classList.remove('on');
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }, beat.hold);
+      }
+    }
+    playBeat();
   }
 
   // Dark hands reach up from below and get slowly overpowered by a rising
