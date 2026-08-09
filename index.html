@@ -4094,14 +4094,18 @@ Wherever the signal was going, you're already there.
         y: mt * mt * baseY + 2 * mt * s * midY + s * s * tipY
       });
     }
+    // silhouette base: muted violet-gray, visible against the indigo
+    // backdrop instead of the old near-black-on-black; ramps to a hot
+    // red/orange at the tip once a tendril is actually gripping hard.
     const tipTint = reach > 0.4 ? (reach - 0.4) / 0.6 : 0;
     for (let i = 0; i < segs; i++) {
       const s = i / segs;
       const w = baseWidth * (1 - s * 0.82);
       const segAlpha = alpha * (1 - s * 0.15);
-      const r = Math.round(10 + 34 * tipTint * s);
-      const b = Math.round(14 + 8 * tipTint * s);
-      ctx.strokeStyle = 'rgba(' + r + ',8,' + b + ',' + segAlpha.toFixed(3) + ')';
+      const r = Math.round(58 + (232 - 58) * tipTint * s);
+      const g = Math.round(48 + (78 - 48) * tipTint * s);
+      const b = Math.round(74 + (34 - 74) * tipTint * s);
+      ctx.strokeStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + segAlpha.toFixed(3) + ')';
       ctx.lineWidth = Math.max(0.6, w);
       ctx.beginPath();
       ctx.moveTo(pts[i].x, pts[i].y);
@@ -4109,7 +4113,7 @@ Wherever the signal was going, you're already there.
       ctx.stroke();
     }
     if (alpha > 0.18) {
-      ctx.strokeStyle = 'rgba(70,50,60,' + (alpha * 0.3).toFixed(3) + ')';
+      ctx.strokeStyle = 'rgba(150,124,158,' + (alpha * 0.32).toFixed(3) + ')';
       ctx.lineWidth = Math.max(0.5, baseWidth * 0.16);
       ctx.beginPath();
       ctx.moveTo(baseX + baseWidth * 0.18, baseY);
