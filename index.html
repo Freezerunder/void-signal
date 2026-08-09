@@ -50,6 +50,13 @@
     80% { transform: translate(3px, 2px); }
   }
   .app.flicker { animation: flick 3.5s steps(1) infinite; }
+  .app.scare-flash { animation: scareflash .5s steps(2); }
+  @keyframes scareflash {
+    0%, 100% { filter: none; }
+    25% { filter: invert(1) brightness(1.6); }
+    50% { filter: none; }
+    75% { filter: invert(1); }
+  }
   @keyframes flick {
     0%, 96%, 100% { opacity: 1; }
     97% { opacity: .55; }
@@ -1283,6 +1290,18 @@ Wherever the signal was going, you're already there.
   ];
 
   const TITLES = ['Void Signal', 'IT HEARS YOU', 'STOP LISTENING', 'STILL HERE', 'LOOK BEHIND'];
+  const AWAY_TITLES = ['COME BACK', "DON'T GO", 'STILL LISTENING', 'IT NOTICED YOU LEFT'];
+
+  const SCARE_LINES = [
+    "it's closer now.",
+    'turn around.',
+    "you shouldn't have looked.",
+    'it knows you can hear it.',
+    "that wasn't on the tape before.",
+    'something just moved past the dish.'
+  ];
+
+  const GLITCH_WORDS = ['?????', 'ᛁᛚᛚ', '███', 'YOU', 'STOP', 'LOOK', 'MINE', 'MEET ME'];
 
   // =================================================================== state
 
@@ -1298,7 +1317,7 @@ Wherever the signal was going, you're already there.
   // #tab-dev markup, the DEV tab button, and 'dev' from the tab-name arrays.
   const DEV = { infSignal: false, noDread: false, infDark: false,
                 noEvents: false, noTravellers: false, godMode: false,
-                freeDark: false, noChests: false, noWatcher: false };
+                freeDark: false, noChests: false, noWatcher: false, noScares: false };
 
   let S = blank();
 
@@ -1901,6 +1920,13 @@ Wherever the signal was going, you're already there.
   let stationPhase = new Array(STATION_COUNT).fill(0).map(function () { return Math.random() * Math.PI * 2; });
   let stationBias = new Array(STATION_COUNT).fill(0).map(function () { return Math.random(); });
 
+  // A scare beat: a dark wave sweeps left-to-right across the stations —
+  // "something is walking toward you through the band" — then they settle
+  // back to their normal dread-driven level once it passes.
+  let stationSweepStart = 0;
+  const STATION_SWEEP_MS = 2400;
+  function triggerStationSweep() { stationSweepStart = Date.now(); }
+
   function drawStations(dt) {
     const w = stationsCv.width, h = stationsCv.height;
     const hot = S.dread / 100;
@@ -1908,11 +1934,19 @@ Wherever the signal was going, you're already there.
 
     stctx.clearRect(0, 0, w, h);
 
+    const sweepK = (Date.now() - stationSweepStart) / STATION_SWEEP_MS;
+    const sweepActive = sweepK >= 0 && sweepK < 1;
+    const sweepPos = sweepK * (STATION_COUNT + 2) - 1;
+
     const margin = 14, spacing = (w - margin * 2) / (STATION_COUNT - 1);
     for (let i = 0; i < STATION_COUNT; i++) {
       // stations with a higher bias go dark earlier as dread rises
-      const target = Math.max(0, Math.min(1, 1 - hot * (0.7 + stationBias[i] * 0.6)));
-      stationLevel[i] += (target - stationLevel[i]) * Math.min(1, dt * 0.0015);
+      let target = Math.max(0, Math.min(1, 1 - hot * (0.7 + stationBias[i] * 0.6)));
+      if (sweepActive) {
+        const dark = Math.max(0, 1 - Math.abs(i - sweepPos) / 1.4);
+        target *= (1 - dark);
+      }
+      stationLevel[i] += (target - stationLevel[i]) * Math.min(1, dt * (sweepActive ? 0.02 : 0.0015));
       const flicker = 0.85 + 0.15 * Math.sin(t * (1.5 + stationBias[i] * 2) + stationPhase[i]);
       const lvl = Math.max(0, stationLevel[i] * flicker);
 
@@ -2057,6 +2091,11 @@ Wherever the signal was going, you're already there.
       log('You did not look back in time. It is still watching, and the array runs worse for it.', 'bad');
       blip(60, 0.6, 'sawtooth', 0.09);
       shake();
+      // punishing the actual failure lands harder than a scare on a timer —
+      // just the visual layer here, the log/shake/blip above already covered
+      // the reaction, this only adds if a cooldown-safe window happens to
+      // line up with it.
+      if (canScareNow(false)) { lastScareAt = Date.now(); scareEffects(); }
       recompute();
     }, 8000);
   }
@@ -2244,10 +2283,27 @@ Wherever the signal was going, you're already there.
     $('ticker').className = 'ticker' + (tone ? ' ' + tone : '');
     logUntil = Date.now() + 9000;
   }
+  // Real save data read back in the whisper's voice — session length, past
+  // deaths, echoes still on file — cheaper and sharper than another
+  // generic line since it's true and the player knows it's true.
+  function personalWhisper() {
+    const lines = [];
+    if (S.playtime > 300) lines.push('you have been listening for ' + fmtTime(S.playtime) + '.');
+    if (S.scars > 0) lines.push('it has reached you ' + S.scars + ' time' + (S.scars === 1 ? '' : 's') + ' before.');
+    if (S.level >= 10) lines.push('slot ' + currentSlot + ' has heard this for ' + S.level + ' levels now.');
+    if (S.echoes > 0) lines.push(S.echoes + ' echo' + (S.echoes === 1 ? '' : 'es') + ' of you are still logged in the array.');
+    return lines.length ? pick(lines) : null;
+  }
+
   function idleLog() {
     if (Date.now() < logUntil) return;
     const whisper = S.dread >= 45 && Math.random() < 0.15 + S.dread / 260;
-    $('tickertext').textContent = whisper ? pick(WHISPERS) : pick(NEWS);
+    let text = whisper ? pick(WHISPERS) : pick(NEWS);
+    if (whisper && Math.random() < 0.3) {
+      const personal = personalWhisper();
+      if (personal) text = personal;
+    }
+    $('tickertext').textContent = text;
     $('ticker').className = 'ticker' + (whisper ? ' whisper' : '');
     logUntil = Date.now() + (whisper ? 11000 : 13000);
   }
@@ -2326,6 +2382,78 @@ Wherever the signal was going, you're already there.
     return loss;
   }
   function ownedGens() { return GENS.filter(function (g) { return S.gens[g.id] > 0; }); }
+
+  // ================================================================= horror
+  // A single funnel every jump-scare beat goes through, so the gating only
+  // has to be right once: never mid-cutscene/encounter, cooldown-spaced so
+  // it stays rare, and every visual piece already respects reduceFlash/
+  // reduceShake/mute on its own (see scareFlash/shake/blip below). See
+  // devBuild()'s Horror section for on-demand triggers of each kind — jsc
+  // can't see a scare fire or judge if it fires too often, only a live
+  // playtest can.
+
+  let lastScareAt = 0;
+  const SCARE_COOLDOWN_MS = 45000;
+  let scaredAtNinetyFive = false;
+
+  function canScareNow(force) {
+    if (encounterOpen || storyScreenOpen()) return false;
+    if (!force && Date.now() - lastScareAt < SCARE_COOLDOWN_MS) return false;
+    return true;
+  }
+
+  function scareFlash() {
+    if (SETTINGS.reduceFlash) return;
+    const app = $('app');
+    app.classList.remove('scare-flash');
+    void app.offsetWidth;
+    app.classList.add('scare-flash');
+  }
+
+  // A jagged, abstract silhouette painted once onto the radar — the next
+  // drawRadar(dt) call (every frame, ~16ms later) clears and redraws over
+  // it, so at most it's there for a single frame. That's the point: it
+  // should read as "did I just see that", not as an obvious sprite.
+  function scareRadarGlimpse() {
+    const R = radar.width / 2;
+    rctx.save();
+    rctx.globalAlpha = 0.5 + Math.random() * 0.3;
+    rctx.fillStyle = 'rgba(194,69,63,0.9)';
+    rctx.beginPath();
+    rctx.moveTo(R - 9, R + 34); rctx.lineTo(R - 3, R - 22); rctx.lineTo(R + 7, R - 32); rctx.lineTo(R + 13, R + 28);
+    rctx.closePath();
+    rctx.fill();
+    rctx.restore();
+  }
+
+  function scareEffects() {
+    scareFlash();
+    scareRadarGlimpse();
+    triggerStationSweep();
+  }
+
+  function triggerScare(kind, force) {
+    if (!canScareNow(force)) return;
+    lastScareAt = Date.now();
+    scareEffects();
+    shake();
+    blip(kind === 'firstNinetyFive' ? 40 : 65, 0.55, 'sawtooth', 0.09);
+    log(kind === 'firstNinetyFive' ? "it's fully awake now." : pick(SCARE_LINES), 'bad');
+  }
+
+  // A fake "Discovery logged" line, formatted exactly like a real one, for
+  // something that was never in the Discoveries tab and isn't there after
+  // — cheaper and sharper than a jump-scare because it makes the player
+  // doubt the UI itself for a second.
+  const FAKE_DISCOVERIES = ['A Second Chair', 'The Other Frequency', 'Your Own Voice, Delayed', 'A Door That Wasn’t There'];
+  function triggerFakeAchievement() {
+    if (!canScareNow(false)) return;
+    lastScareAt = Date.now();
+    log('Discovery logged: ' + pick(FAKE_DISCOVERIES) + '  (+1% production)', 'bad');
+    blip(980, 0.14, 'triangle');
+    // reverts on its own after a couple seconds — it was never really there
+    setTimeout(function () { logUntil = 0; idleLog(); }, 2600);
+  }
 
   // ------------------------------------------------------------- the events
 
@@ -3597,7 +3725,8 @@ Wherever the signal was going, you're already there.
       toggle('godMode', 'God mode (lose nothing)'),
       toggle('freeDark', 'Free GO DARK'),
       toggle('noChests', 'No chests'),
-      toggle('noWatcher', 'No watcher')
+      toggle('noWatcher', 'No watcher'),
+      toggle('noScares', 'No scares')
     ]);
 
     section('Signal', [
@@ -3628,6 +3757,14 @@ Wherever the signal was going, you're already there.
       btn('Intro screen', function () { showIntro(); }),
       btn('Death flourish', function () { showDeathFlourish(); }),
       btn('Win screen (ending)', function () { showWinScreen(); })
+    ]);
+
+    section('Horror', [
+      btn('Ambient scare (forced)', function () { triggerScare('ambient', true); }),
+      btn('"Fully awake" scare', function () { triggerScare('firstNinetyFive', true); }),
+      btn('Fake achievement toast', function () { lastScareAt = 0; triggerFakeAchievement(); }),
+      btn('Station sweep only', function () { triggerStationSweep(); }),
+      btn('Watcher (wait 8s for timeout)', function () { spawnWatcher(); })
     ]);
 
     section('Dread', [
@@ -3915,6 +4052,18 @@ Wherever the signal was going, you're already there.
   });
   window.addEventListener('blur', function () { spaceHeld = false; });
 
+  // The game noticing you left: while the tab is hidden, its title creeps
+  // toward "come back" instead of just freezing on whatever it last showed
+  // (rAF/timers throttle down while hidden, so the per-frame title-cycling
+  // above wouldn't otherwise update at all until you're already looking).
+  document.addEventListener('visibilitychange', function () {
+    if (document.hidden) {
+      if (S.dread >= 55) document.title = pick(AWAY_TITLES);
+    } else {
+      document.title = 'Void Signal';
+    }
+  });
+
   // =================================================================== loop
 
   let last = 0, listTimer = 0, saveTimer = 0, titleTimer = 0, heartTimer = 0;
@@ -3959,6 +4108,19 @@ Wherever the signal was going, you're already there.
     }
     if (S.dread >= 100) contact();
 
+    // horror beats: a guaranteed one-time hit the first time dread crosses
+    // 95 (the "it's fully awake now" moment), then rare cooldown-spaced
+    // ambient scares for as long as it stays that high.
+    if (S.dread >= 95 && !scaredAtNinetyFive && !DEV.noScares) {
+      scaredAtNinetyFive = true;
+      triggerScare('firstNinetyFive', true);
+    } else if (S.dread > 85 && !DEV.noScares && Math.random() < 0.0008) {
+      triggerScare('ambient');
+    }
+    if (S.dread > 40 && !DEV.noScares && Math.random() < 0.00006) {
+      triggerFakeAchievement();
+    }
+
     // held-space auto ping
     if (spaceHeld) {
       spaceTimer += dt;
@@ -4000,9 +4162,11 @@ Wherever the signal was going, you're already there.
 
     // headline numbers
     const glitch = !SETTINGS.reduceFlash && S.dread > 70 && Math.random() < 0.006;
-    $('signal').textContent = glitch ? pick(['?????', 'ᛁᛚᛚ', '███', 'YOU']) : fmt(S.signal);
-    $('rate').textContent = fmt(ps) + ' /sec' + (frenzyMul() > 1 ? '  ⚡×7' : '');
-    $('clickval').textContent = fmt(clickValue());
+    $('signal').textContent = glitch ? pick(GLITCH_WORDS) : fmt(S.signal);
+    const rateGlitch = !SETTINGS.reduceFlash && S.dread > 80 && Math.random() < 0.003;
+    $('rate').textContent = rateGlitch ? pick(GLITCH_WORDS) : fmt(ps) + ' /sec' + (frenzyMul() > 1 ? '  ⚡×7' : '');
+    const clickGlitch = !SETTINGS.reduceFlash && S.dread > 80 && Math.random() < 0.003;
+    $('clickval').textContent = clickGlitch ? pick(GLITCH_WORDS) : fmt(clickValue());
     $('echoes').textContent = S.echoes;
     $('scars').textContent = S.scars;
 
