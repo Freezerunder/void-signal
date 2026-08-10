@@ -393,6 +393,61 @@
   .inforow b.on { color: var(--accent); }
   .inforow b.off { color: var(--dim); }
 
+  /* ------------------------------------------------------------ downloads */
+
+  .dlgrid {
+    display: grid; gap: 18px; max-width: 860px;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  }
+  .dlcard {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 20px;
+    display: flex; flex-direction: column;
+  }
+  .dlcard.primary { border-color: rgba(63,167,160,.3); }
+  .dl-kicker {
+    font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase;
+    color: var(--accent); margin-bottom: 10px;
+  }
+  .dl-title {
+    font-size: 15px; letter-spacing: .12em; text-transform: uppercase;
+    color: #e8ecf2; margin-bottom: 9px;
+  }
+  .dl-desc { font-size: 12px; line-height: 1.65; color: var(--muted); margin-bottom: 18px; }
+  .dl-spacer { flex: 1; }
+
+  .btn-dl {
+    display: block; width: 100%; padding: 12px 0; text-align: center;
+    background: linear-gradient(180deg, rgba(63,167,160,.24), rgba(63,167,160,.12));
+    border: 1px solid rgba(63,167,160,.5); border-radius: 9px;
+    color: #d5f3f0; text-decoration: none;
+    font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+    transition: background .18s, box-shadow .18s, color .18s;
+  }
+  .btn-dl:hover {
+    background: linear-gradient(180deg, rgba(63,167,160,.38), rgba(63,167,160,.19));
+    color: #f0fffd; box-shadow: 0 0 28px rgba(63,167,160,.22);
+  }
+  .btn-dl.off {
+    background: rgba(255,255,255,.03); border-color: var(--line);
+    color: var(--dim); pointer-events: none; box-shadow: none;
+  }
+
+  .dl-alts { margin-top: 13px; display: flex; flex-wrap: wrap; gap: 15px; }
+  .dl-alts a {
+    font-size: 9.5px; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--dim); text-decoration: none;
+  }
+  .dl-alts a:hover { color: var(--accent); }
+  .dl-status {
+    margin-top: 13px; font-size: 10.5px; letter-spacing: .08em; color: var(--dim);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .dl-steps {
+    margin: 0; padding-left: 17px;
+    font-size: 11.5px; line-height: 1.8; color: var(--muted);
+  }
+
   .warn {
     max-width: 860px; margin-top: 20px; padding: 13px 15px;
     background: rgba(194,69,63,.05); border: 1px solid rgba(194,69,63,.2);
@@ -468,6 +523,7 @@
 
     <nav class="side-nav">
       <button class="navbtn on" data-view="library"><span class="dot"></span>Library</button>
+      <button class="navbtn" data-view="downloads"><span class="dot"></span>Downloads</button>
       <button class="navbtn" data-view="account"><span class="dot"></span>Account</button>
       <button class="navbtn" disabled><span class="dot"></span>Store<span class="soon">Soon</span></button>
     </nav>
@@ -511,6 +567,50 @@
 
       <div class="grid-head">All titles</div>
       <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- ----------------------------------------------------- downloads -->
+    <section class="view" id="view-downloads" hidden>
+      <div class="head">
+        <h1>Downloads</h1>
+        <p id="dlsub">Take the arcade with you</p>
+      </div>
+
+      <div class="dlgrid">
+        <div class="dlcard primary">
+          <div class="dl-kicker" id="dl-kicker">Desktop app</div>
+          <div class="dl-title" id="dl-title">Void Arcade</div>
+          <div class="dl-desc" id="dl-desc">
+            The launcher and every game in it, installed as one app. Same library,
+            same saves format, no browser tab.
+          </div>
+          <div class="dl-spacer"></div>
+          <a class="btn-dl off" id="dl-primary" href="https://github.com/Freezerunder/void-signal/releases/latest">Checking for builds…</a>
+          <div class="dl-alts" id="dl-alts"></div>
+          <div class="dl-status" id="dl-status"></div>
+        </div>
+
+        <div class="dlcard">
+          <div class="dl-kicker">Web app</div>
+          <div class="dl-title">Install from the browser</div>
+          <div class="dl-desc">
+            Installs this page as its own app with its own window and icon — no
+            download, no installer, and it keeps working offline once it has
+            loaded once.
+          </div>
+          <div class="dl-spacer"></div>
+          <button class="btn-dl off" id="pwa-install">Install</button>
+          <div class="dl-status" id="pwa-status"></div>
+        </div>
+      </div>
+
+      <div class="warn" id="dl-warn">
+        <b>Note:</b> the desktop builds are unsigned — there are no Apple or
+        Windows signing certificates behind them. macOS will call it an
+        unidentified developer (right-click → Open the first time) and Windows
+        SmartScreen will warn before letting it run. The web install above has
+        neither problem.
+      </div>
     </section>
 
     <!-- ------------------------------------------------------- account -->
@@ -804,8 +904,16 @@
     }
   ];
 
+  // Running inside the Electron wrapper rather than a browser tab. Both games
+  // are bundled into that build, so there is nothing to download there — the
+  // Downloads view and the card footers say so instead of offering a button
+  // that would re-download files already sitting on disk.
+  var IS_DESKTOP = /electron/i.test(navigator.userAgent || '') || location.protocol === 'file:';
+
   function lastPlayedText(gameId) {
-    if (!session || session.guest || !session.plays || !session.plays[gameId]) return 'Never played';
+    if (!session || session.guest || !session.plays || !session.plays[gameId]) {
+      return IS_DESKTOP ? 'Installed' : 'Play in browser';
+    }
     var days = Math.floor((Date.now() - session.plays[gameId].at) / 86400000);
     if (days <= 0) return 'Played today';
     if (days === 1) return 'Played yesterday';
@@ -870,15 +978,209 @@
 
   $('heroplay').addEventListener('click', function () { launch(GAMES[0]); });
 
+  // ============================================================== downloads
+
+  var RELEASES_URL = 'https://github.com/Freezerunder/void-signal/releases/latest';
+  var RELEASES_API = 'https://api.github.com/repos/Freezerunder/void-signal/releases/latest';
+
+  // electron-builder names its output off productName, which contains a space
+  // ("Void Arcade Setup 1.0.0.exe"), so asset URLs are read off the API
+  // response rather than assembled here — a hand-built path would break on
+  // the encoding the moment the product name changes.
+  var PLATFORMS = [
+    { id: 'mac',   label: 'macOS',   match: /\.dmg$/i },
+    { id: 'win',   label: 'Windows', match: /\.exe$/i },
+    { id: 'linux', label: 'Linux',   match: /\.AppImage$/i }
+  ];
+
+  function detectPlatform() {
+    var ua = navigator.userAgent || '', plat = navigator.platform || '';
+    if (/Android/i.test(ua)) return 'android';
+    if (/iPhone|iPad|iPod/i.test(ua)) return 'ios';
+    if (/Mac/i.test(plat) || /Mac OS X/i.test(ua)) {
+      return navigator.maxTouchPoints > 1 ? 'ios' : 'mac';   // iPadOS reports MacIntel
+    }
+    if (/Win/i.test(plat) || /Windows/i.test(ua)) return 'win';
+    if (/Linux|X11/i.test(plat) || /Linux/i.test(ua)) return 'linux';
+    return 'other';
+  }
+
+  function platformById(id) {
+    for (var i = 0; i < PLATFORMS.length; i++) if (PLATFORMS[i].id === id) return PLATFORMS[i];
+    return null;
+  }
+
+  function fmtSize(bytes) {
+    if (!bytes) return '';
+    var mb = bytes / 1048576;
+    return (mb >= 100 ? Math.round(mb) : mb.toFixed(1)) + ' MB';
+  }
+
+  function setPrimary(label, href, enabled) {
+    var b = $('dl-primary');
+    b.textContent = label;
+    if (href) b.href = href;
+    b.classList.toggle('off', !enabled);
+  }
+
+  function buildDownloads() {
+    var here = detectPlatform();
+
+    if (IS_DESKTOP) {
+      $('dl-kicker').textContent = 'Desktop app';
+      $('dl-title').textContent = 'Already installed';
+      $('dl-desc').textContent = 'You are running the desktop app. Every game in the library ships inside it, so there is nothing else to download.';
+      setPrimary('Running the desktop app', null, false);
+      $('dl-alts').innerHTML = '';
+      $('dl-status').textContent = '';
+      $('dl-warn').hidden = true;
+      buildPWACard(here);
+      return;
+    }
+
+    if (here === 'ios' || here === 'android') {
+      $('dl-desc').textContent = 'The desktop app covers macOS, Windows and Linux. On a phone or tablet, install the web app instead — it gets its own icon and works offline.';
+      setPrimary('No mobile build', null, false);
+      $('dl-status').textContent = '';
+    } else {
+      var p = platformById(here);
+      setPrimary(p ? 'Download for ' + p.label : 'Download', RELEASES_URL, false);
+      $('dl-status').textContent = 'Checking GitHub for published builds…';
+      fetchRelease(here);
+    }
+
+    buildPWACard(here);
+  }
+
+  // Answers are cached for the life of the page so flipping between views
+  // doesn't spend the unauthenticated GitHub rate limit (60/hour per IP) a
+  // request at a time. Failures are deliberately not cached — a transient
+  // blip shouldn't leave the card stuck on "could not reach GitHub" until
+  // the page is reloaded.
+  var releaseState = null;
+
+  function fetchRelease(here) {
+    if (releaseState === 'none') { noRelease(); return; }
+    if (releaseState) { showRelease(releaseState, here); return; }
+    if (typeof fetch !== 'function') { releaseUnknown(here); return; }
+
+    fetch(RELEASES_API, { headers: { 'Accept': 'application/vnd.github+json' } })
+      .then(function (res) {
+        if (res.status === 404) { releaseState = 'none'; noRelease(); return null; }
+        if (!res.ok) throw new Error('http ' + res.status);
+        return res.json();
+      })
+      .then(function (rel) { if (rel) { releaseState = rel; showRelease(rel, here); } })
+      .catch(function () { releaseUnknown(here); });
+  }
+
+  function noRelease() {
+    setPrimary('Not published yet', null, false);
+    $('dl-status').textContent = 'No desktop builds have been published yet. The web install on the right works today.';
+    $('dl-alts').innerHTML = '';
+  }
+
+  // Network blocked, rate-limited, offline — anything other than a clean
+  // "there is no release". Send them to the releases page rather than
+  // claiming there is nothing there.
+  function releaseUnknown(here) {
+    var p = platformById(here);
+    setPrimary(p ? 'Download for ' + p.label : 'Open releases', RELEASES_URL, true);
+    $('dl-status').textContent = 'Could not reach GitHub — this opens the releases page.';
+  }
+
+  function showRelease(rel, here) {
+    var assets = rel.assets || [], alts = $('dl-alts'), mine = null;
+    alts.innerHTML = '';
+
+    PLATFORMS.forEach(function (p) {
+      var found = null;
+      assets.forEach(function (a) { if (!found && p.match.test(a.name)) found = a; });
+      if (!found) return;
+      if (p.id === here) { mine = { p: p, a: found }; return; }
+      var link = document.createElement('a');
+      link.href = found.browser_download_url;
+      link.textContent = p.label;
+      alts.appendChild(link);
+    });
+
+    if (mine) {
+      setPrimary('Download for ' + mine.p.label, mine.a.browser_download_url, true);
+      $('dl-status').textContent = (rel.tag_name || '') + ' · ' + fmtSize(mine.a.size);
+    } else if (assets.length) {
+      setPrimary('Open releases', rel.html_url || RELEASES_URL, true);
+      $('dl-status').textContent = (rel.tag_name || '') + ' · no build for this platform yet';
+    } else {
+      noRelease();
+    }
+  }
+
+  // ------------------------------------------------------------ pwa install
+  // beforeinstallprompt only exists in Chromium browsers. Everywhere else the
+  // install lives in a menu, so the card explains where instead of showing a
+  // button that cannot do anything.
+
+  var installPrompt = null;
+
+  function isStandalone() {
+    if (navigator.standalone) return true;
+    return !!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  }
+
+  function buildPWACard(here) {
+    var btn = $('pwa-install'), status = $('pwa-status');
+
+    if (IS_DESKTOP || isStandalone()) {
+      btn.textContent = 'Already installed';
+      btn.classList.add('off');
+      status.textContent = IS_DESKTOP ? 'The desktop app covers this.' : 'Running as an installed app.';
+      return;
+    }
+    if (installPrompt) {
+      btn.textContent = 'Install';
+      btn.classList.remove('off');
+      status.textContent = '';
+      return;
+    }
+
+    btn.textContent = 'Install from your browser menu';
+    btn.classList.add('off');
+    if (here === 'ios') status.textContent = 'Safari: Share → Add to Home Screen.';
+    else if (here === 'mac') status.textContent = 'Safari: File → Add to Dock. Chrome/Edge: the install icon in the address bar.';
+    else if (here === 'android') status.textContent = 'Chrome: menu → Install app.';
+    else status.textContent = 'Chrome/Edge: the install icon at the right of the address bar.';
+  }
+
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installPrompt = e;
+    if (!$('view-downloads').hidden) buildPWACard(detectPlatform());
+  });
+
+  window.addEventListener('appinstalled', function () {
+    installPrompt = null;
+    buildPWACard(detectPlatform());
+  });
+
+  $('pwa-install').addEventListener('click', function () {
+    if (!installPrompt) return;
+    installPrompt.prompt();
+    installPrompt = null;
+    $('pwa-install').classList.add('off');
+    $('pwa-status').textContent = 'Finish in the browser prompt.';
+  });
+
   // ================================================================== views
 
+  var VIEWS = ['library', 'downloads', 'account'];
+
   function showView(name) {
-    $('view-library').hidden = name !== 'library';
-    $('view-account').hidden = name !== 'account';
+    VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
     Array.prototype.forEach.call(document.querySelectorAll('.navbtn'), function (b) {
       b.classList.toggle('on', b.dataset.view === name);
     });
     if (name === 'account') buildAccount();
+    if (name === 'downloads') buildDownloads();
   }
 
   Array.prototype.forEach.call(document.querySelectorAll('.navbtn'), function (b) {

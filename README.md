@@ -32,6 +32,21 @@ What that means in practice:
 
 **Continue as guest** skips sign-in entirely and goes straight to the library, with no dev access and no play tracking.
 
+### Downloads
+
+The **Downloads** view offers the launcher itself two ways, on the Epic model — you install the launcher, and every game comes with it.
+
+- **Web app** — installs this page as its own windowed app with its own icon, no installer and no signing warnings, and it keeps working offline after the first load. Chromium browsers get a real **Install** button (via `beforeinstallprompt`); Safari and the rest get the menu path for their browser, since there's no API to trigger it.
+- **Desktop app** — the Electron build in `electron/`, which bundles `index.html`, `voidsignal.html` and `tetris.html` together, so inside the app there is nothing left to download and the cards read **Installed** rather than "Play in browser". The launcher looks up the latest GitHub release at runtime and points the button at the right asset for the visitor's OS, reading the URL off the API response rather than assembling it — `productName` has a space in it, so electron-builder emits names like `Void Arcade Setup 1.0.0.exe`. With no release published it says so plainly instead of linking to an empty page, and if GitHub can't be reached it falls back to the releases page. The answer is cached for the life of the page so switching views doesn't burn the unauthenticated rate limit.
+
+**Publishing a desktop build** (nothing is published yet):
+
+1. `.github/workflows/build-desktop.yml` has to exist **on the remote**. Pushing it needs the `workflow` OAuth scope, which the current token doesn't have — either `gh auth refresh -s workflow` or paste the file into GitHub's web editor.
+2. Run it once via **workflow_dispatch** first. It has never run, so expect to debug it from the Actions logs.
+3. `git pull` (the workflow commit only exists on the remote), then tag: `git tag v1.0.0 && git push origin v1.0.0`. Actions resolves the workflow from the ref being pushed, so tagging a local commit that predates it silently triggers nothing. Keep the tag in step with `version` in `electron/package.json` or the installers come out mislabelled.
+
+The builds are unsigned — macOS will call it an unidentified developer and Windows SmartScreen will warn — which the Downloads view says on the page.
+
 ---
 
 ## Tetris
