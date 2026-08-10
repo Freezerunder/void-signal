@@ -393,6 +393,25 @@
   .inforow b.on { color: var(--accent); }
   .inforow b.off { color: var(--dim); }
 
+  .art-2048 {
+    background:
+      linear-gradient(135deg, rgba(240,180,41,.16), transparent 55%),
+      radial-gradient(ellipse 90% 70% at 50% 115%, rgba(240,180,41,.18), transparent 62%),
+      linear-gradient(180deg, #14100a, #06070a);
+  }
+  .art-2048::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 84px; height: 84px;
+    background:
+      linear-gradient(#e8e0d2, #e8e0d2) 0 0 / 38px 38px no-repeat,
+      linear-gradient(#f2b179, #f2b179) 46px 0 / 38px 38px no-repeat,
+      linear-gradient(#edcf72, #edcf72) 0 46px / 38px 38px no-repeat,
+      linear-gradient(#4e8fd0, #4e8fd0) 46px 46px / 38px 38px no-repeat;
+    opacity: .9;
+    filter: drop-shadow(0 0 14px rgba(240,180,41,.3));
+  }
+
   /* ------------------------------------------------------------ downloads */
 
   .dlgrid {
@@ -901,6 +920,10 @@
     {
       id: 'tetris', title: 'Tetris', file: 'tetris.html',
       tag: 'Puzzle · Arcade', art: 'art-tetris'
+    },
+    {
+      id: '2048', title: '2048', file: '2048.html',
+      tag: 'Puzzle · Numbers', art: 'art-2048'
     }
   ];
 

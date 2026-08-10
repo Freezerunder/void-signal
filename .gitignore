@@ -3,4 +3,5 @@ electron/dist/
 electron/index.html
 electron/voidsignal.html
 electron/tetris.html
+electron/2048.html
 electron/icons/

@@ -6,7 +6,8 @@ A small launcher and two self-contained retro games. Each is a single HTML file 
 | --- | --- |
 | `index.html` | **Nova Games** — the launcher: sign-in and the game library |
 | `voidsignal.html` | **Void Signal** — an idle/clicker about a derelict deep-space listening station |
-| `tetris.html` | **Tetris** — the classic, 10×20 |
+| `tetris.html` | **Tetris** — the classic, 10×20, plus helper pieces |
+| `2048.html` | **2048** — slide and merge to the 2048 tile |
 
 `index.html` is the landing page on purpose — it's the file a static host serves at `/`, so the launcher is what a visitor sees first. The games are reachable directly by URL too; the launcher is a front door, not a gate.
 
@@ -14,6 +15,7 @@ A small launcher and two self-contained retro games. Each is a single HTML file 
 open ~/my-website/index.html       # the launcher
 open ~/my-website/voidsignal.html  # Void Signal
 open ~/my-website/tetris.html      # Tetris
+open ~/my-website/2048.html        # 2048
 ```
 
 ---
@@ -67,6 +69,14 @@ All 7 tetrominoes in their classic colors, plus three **helper pieces** — a si
 | Enter | Restart after game over |
 
 Line clears score 100 / 300 / 500 / 800 for 1–4 rows, times the level. Level rises every 10 lines and gravity speeds up with it, from 800 ms per row down to 30 ms. Pieces come from a shuffled 7-bag, a ghost shows the landing spot, and a short lock delay lets you slide a piece after it touches down.
+
+## 2048
+
+Slide the 4×4 grid with the arrows, WASD, or a swipe; equal tiles merge and the score is the sum of everything you make. Reaching **2048** wins, and carrying on keeps the same board — for most people the real game starts after the win. Standard 90/10 spawn split between 2s and 4s.
+
+One direction is implemented — sliding a line toward index 0 — and the four directions are expressed as different ways of reading lines out of the grid, because four hand-written copies of merge logic is exactly where the bugs live. A freshly merged tile is inert for the rest of that slide, so `2 2 4` becomes `4 4` rather than `8`.
+
+Same leaderboard as Tetris, under `arcade.scores.v1`.
 
 ## Void Signal
 

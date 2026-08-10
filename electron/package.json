@@ -25,6 +25,7 @@
       "index.html",
       "voidsignal.html",
       "tetris.html",
+      "2048.html",
       "icons/**/*"
     ],
     "mac": {
