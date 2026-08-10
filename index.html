@@ -908,7 +908,14 @@
   // are bundled into that build, so there is nothing to download there — the
   // Downloads view and the card footers say so instead of offering a button
   // that would re-download files already sitting on disk.
-  var IS_DESKTOP = /electron/i.test(navigator.userAgent || '') || location.protocol === 'file:';
+  //
+  // The user-agent is the whole test on purpose. A `file:` protocol check
+  // looks like a reasonable second signal and is actively wrong: opening
+  // index.html straight off disk in a normal browser (which the README
+  // suggests) is also `file:`, and that visitor would be told they were
+  // running an app they have not installed. Electron appends Electron/<ver>
+  // to the UA and electron/main.js never overrides it.
+  var IS_DESKTOP = /\bElectron\//i.test(navigator.userAgent || '');
 
   function lastPlayedText(gameId) {
     if (!session || session.guest || !session.plays || !session.plays[gameId]) {
