@@ -1081,9 +1081,11 @@
       .catch(function () { releaseUnknown(here); });
   }
 
+  // No wording about which card is "on the right" — the two cards stack on a
+  // narrow screen, and this is the state a visitor is most likely to hit.
   function noRelease() {
-    setPrimary('Not published yet', null, false);
-    $('dl-status').textContent = 'No desktop builds have been published yet. The web install on the right works today.';
+    setPrimary('No desktop build yet', null, false);
+    $('dl-status').textContent = 'Nothing has been published to GitHub Releases yet. Install it as a web app instead — that works today, and this button lights up on its own once a build is out.';
     $('dl-alts').innerHTML = '';
   }
 
