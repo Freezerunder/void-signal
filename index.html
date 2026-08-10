@@ -318,10 +318,19 @@
     box-shadow: 0 0 30px rgba(194,69,63,.6);
     animation: watcherpulse 1.1s ease-in-out infinite;
   }
-  #watcher.on { display: grid; }
+  #watcher.on { display: grid; animation: watcherpulse 1.1s ease-in-out infinite, watcherurgency 8s linear forwards; }
   @keyframes watcherpulse {
     0%, 100% { transform: scale(1); opacity: .85; }
     50%      { transform: scale(1.18); opacity: 1; }
+  }
+  /* Matches spawnWatcher()'s 8s timeout exactly — the glow visibly tightens
+     and reddens as the window closes, so the punishment on timeout reads as
+     "I saw it coming and didn't move" rather than an arbitrary clock the
+     player can't see. Smooth build, not a strobe, so not gated on
+     reduceFlash (that's for actual flash/invert effects, see scareFlash). */
+  @keyframes watcherurgency {
+    0%, 55%  { box-shadow: 0 0 30px rgba(194,69,63,.6); border-color: #5a2020; }
+    100%     { box-shadow: 0 0 55px rgba(194,69,63,.95), 0 0 90px rgba(194,69,63,.4); border-color: #e84e22; }
   }
 
   /* ---------------------------------------------------------------- modal */
