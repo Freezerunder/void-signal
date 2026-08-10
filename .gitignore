@@ -1,4 +1,6 @@
 electron/node_modules/
 electron/dist/
 electron/index.html
+electron/voidsignal.html
+electron/tetris.html
 electron/icons/

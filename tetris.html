@@ -168,14 +168,32 @@
     #board { height: 68vh; width: calc(68vh / 2); }
   }
 
+  /* Back to the launcher. Fixed so it never disturbs the centred game
+     layout, and dim until hovered so it stays out of the way while playing. */
+  .backlink {
+    position: fixed; top: 16px; left: 18px; z-index: 20;
+    color: var(--muted); text-decoration: none;
+    font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px;
+    background: rgba(20,24,34,.6);
+    transition: color .16s, border-color .16s;
+  }
+  .backlink:hover { color: var(--accent); border-color: var(--accent); }
+
   @media (max-width: 560px) {
     .game { flex-direction: column; align-items: center; }
     .panel { width: 300px; }
     .title { text-align: center; }
+    /* Stays fixed rather than going static — body is a centring flexbox, so
+       an in-flow link would become a sibling item and shove the board off
+       centre. The board is only ~34vh wide, so there is room at the left. */
+    .backlink { top: 10px; left: 10px; padding: 6px 9px; font-size: 9.5px; }
   }
 </style>
 </head>
 <body>
+
+<a class="backlink" href="index.html">← Library</a>
 
 <div class="game">
   <div class="board-wrap">

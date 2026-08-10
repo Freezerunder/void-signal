@@ -1,9 +1,9 @@
 {
-  "name": "void-signal-desktop",
-  "productName": "Void Signal",
+  "name": "void-arcade-desktop",
+  "productName": "Void Arcade",
   "version": "1.0.0",
   "private": true,
-  "description": "A horror idle game about a derelict deep-space listening station.",
+  "description": "A small launcher for the games: Void Signal and Tetris.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -14,8 +14,8 @@
     "electron-builder": "24.13.3"
   },
   "build": {
-    "appId": "com.freezerunder.voidsignal",
-    "productName": "Void Signal",
+    "appId": "com.freezerunder.voidarcade",
+    "productName": "Void Arcade",
     "icon": "icons/icon-1024.png",
     "directories": {
       "output": "dist"
@@ -23,6 +23,8 @@
     "files": [
       "main.js",
       "index.html",
+      "voidsignal.html",
+      "tetris.html",
       "icons/**/*"
     ],
     "mac": {

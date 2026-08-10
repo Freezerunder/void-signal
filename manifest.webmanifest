@@ -1,7 +1,7 @@
 {
-  "name": "Void Signal",
-  "short_name": "Void Signal",
-  "description": "A horror idle game about a derelict deep-space listening station.",
+  "name": "Void Arcade",
+  "short_name": "Void Arcade",
+  "description": "A small launcher for the games: Void Signal and Tetris.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",

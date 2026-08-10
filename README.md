@@ -1,18 +1,36 @@
 # my-website
 
-Two self-contained retro games. Each is a single HTML file — no build step, no dependencies, no server. Open one and play.
+A small launcher and two self-contained retro games. Each is a single HTML file — no build step, no dependencies, no server. Open one and play.
 
-| File | Game |
+| File | What it is |
 | --- | --- |
-| `index.html` | **Void Signal** — an idle/clicker about a derelict deep-space listening station |
+| `index.html` | **Void Arcade** — the launcher: sign-in and the game library |
+| `voidsignal.html` | **Void Signal** — an idle/clicker about a derelict deep-space listening station |
 | `tetris.html` | **Tetris** — the classic, 10×20 |
 
-`index.html` is the landing page on purpose — it's the file a static host serves at `/`, so Void Signal is what a visitor sees first.
+`index.html` is the landing page on purpose — it's the file a static host serves at `/`, so the launcher is what a visitor sees first. The games are reachable directly by URL too; the launcher is a front door, not a gate.
 
 ```sh
-open ~/my-website/index.html   # Void Signal
-open ~/my-website/tetris.html  # Tetris
+open ~/my-website/index.html       # the launcher
+open ~/my-website/voidsignal.html  # Void Signal
+open ~/my-website/tetris.html      # Tetris
 ```
+
+---
+
+## Void Arcade (the launcher)
+
+A sign-in screen and a library, in the spirit of a desktop game launcher: a sidebar with the account chip, a featured banner, and a card per game with when you last played it. Cover art is drawn with CSS gradients rather than image files so the launcher stays as self-contained as the games it launches.
+
+**Accounts are local to the browser.** There is no server behind any of this — accounts live in `localStorage` under `arcade.accounts.v1`, and the current session under `arcade.session.v1`. Passwords are salted with 16 random bytes and stretched through 4,000 rounds of SHA-256 (hand-rolled, because `crypto.subtle` only exists in secure contexts and the Electron wrapper loads these pages over `file://`), so a glance at storage doesn't hand over the plaintext.
+
+What that means in practice:
+
+- Accounts **do not sync** between devices, browsers, or private windows. Each browser starts with an empty account list.
+- **The first account created on a device gets DEV ACCESS**, and no account created after it does. Since the list starts empty per browser, this makes the owner account the dev account on the owner's machine — it does not stop someone from being "first" in their own browser.
+- Anyone who can open the developer console on their own machine can edit what's stored there, and this repo is public, so the source is readable too. Dev access is a convenience switch, not a security boundary. Don't reuse a real password.
+
+**Continue as guest** skips sign-in entirely and goes straight to the library, with no dev access and no play tracking.
 
 ---
 
@@ -76,13 +94,14 @@ Click the dish or hold **Space**. Progress is saved in your browser's local stor
 
 **DEV tab** (temporary, for testing)
 
-A purple **DEV** tab with toggles (infinite signal, no horror, infinite dark, no events, no travellers, god mode, free GO DARK, no chests, no watcher) and buttons to grant signal from +1K up to +1Vg, jump to level 10/25/50 and print the current dark cost, jump dread, force Contact, spawn either kind of wave, spawn a chest forced to loot or to ruin, spawn the Watcher, fire any specific traveller or any event by kind, and unlock everything. Every toggle defaults to off. It's fenced with `DEV PANEL START` / `DEV PANEL END` comments in four places (CSS, two markup blocks, and the JS block); the `DEV` state object itself sits nearby, unfenced but flagged with a comment, since leaving its all-`false` defaults in place is harmless even without the panel that toggles them.
+Only visible when the launcher's owner account is signed in — `devBuild()` checks the stored session against `arcade.accounts.v1` and, for anyone else (another account, a guest, or someone who opened `voidsignal.html` directly), removes the tab button and its panel instead of building them. A purple **DEV** tab with toggles (infinite signal, no horror, infinite dark, no events, no travellers, god mode, free GO DARK, no chests, no watcher) and buttons to grant signal from +1K up to +1Vg, jump to level 10/25/50 and print the current dark cost, jump dread, force Contact, spawn either kind of wave, spawn a chest forced to loot or to ruin, spawn the Watcher, fire any specific traveller or any event by kind, and unlock everything. Every toggle defaults to off. It's fenced with `DEV PANEL START` / `DEV PANEL END` comments in four places (CSS, two markup blocks, and the JS block); the `DEV` state object itself sits nearby, unfenced but flagged with a comment, since leaving its all-`false` defaults in place is harmless even without the panel that toggles them.
 
 ---
 
 ## Notes
 
-Both games were tested headlessly with macOS's built-in JavaScriptCore (`jsc`):
+Everything here is tested headlessly with macOS's built-in JavaScriptCore (`jsc`):
 
+- **Void Arcade** — the launcher's real script is evaluated against a DOM stub and driven end to end: the SHA-256 implementation is checked against known vectors (including a multi-byte UTF-8 one), then account creation, the first-account-is-dev rule, every validation and wrong-password path, guest sessions, launch tracking, and a reboot with a stored session. The same suite evaluates `devAccess()` straight out of `voidsignal.html` against the storage the launcher just wrote, covering owner / second account / guest / signed-out / corrupt-storage.
 - **Tetris** — driving its real key handlers and reading the board back from its own draw calls.
 - **Void Signal** — running its real economy through a 40-day simulated playthrough, plus a horror suite that executes every event branch, all 46 traveller options, all 20 chest outcomes, and the Watcher's click-resolution *and* ignored-timeout paths, against both empty and wealthy stations, asserting no NaN, negative or out-of-range state comes out of any of them, and checking that level thresholds and the GO DARK price stay consistent from level 1 to 120. The Store's purchase/cooldown logic is checked separately, and a DOM-aware pass confirms the upgrades and store lists update their existing rows in place on repaint rather than rebuilding the list from scratch (the fix for a hover-flicker bug).
