@@ -1,6 +1,7 @@
 electron/node_modules/
 electron/dist/
 electron/index.html
+electron/nova.js
 electron/voidsignal.html
 electron/tetris.html
 electron/2048.html

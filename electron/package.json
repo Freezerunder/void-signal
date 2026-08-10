@@ -22,6 +22,7 @@
     },
     "files": [
       "main.js",
+      "nova.js",
       "index.html",
       "voidsignal.html",
       "tetris.html",

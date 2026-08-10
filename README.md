@@ -24,13 +24,19 @@ open ~/my-website/2048.html        # 2048
 
 A sign-in screen and a library, in the spirit of a desktop game launcher: a sidebar with the account chip, a featured banner, and a card per game with when you last played it. Cover art is drawn with CSS gradients rather than image files so the launcher stays as self-contained as the games it launches.
 
-**Accounts are local to the browser.** There is no server behind any of this — accounts live in `localStorage` under `arcade.accounts.v1`, and the current session under `arcade.session.v1`. Passwords are salted with 16 random bytes and stretched through 4,000 rounds of SHA-256 (hand-rolled, because `crypto.subtle` only exists in secure contexts and the Electron wrapper loads these pages over `file://`), so a glance at storage doesn't hand over the plaintext.
+**Accounts and scores live on a server.** A Supabase project backs both, so your name, your dev access and the leaderboards follow you between browsers, devices and the desktop app. `nova.js` is the shared client — the one deliberate exception to the single-file rule here, because four copies of an auth client is four places for them to drift apart. It is loaded as a classic script, not a module, so it still works over `file://` inside the Electron build.
 
-What that means in practice:
+The publishable key sits in public source, which is what that kind of key is for. **Every rule that matters is enforced in the database, not the browser** — see `supabase/schema.sql`:
 
-- Accounts **do not sync** between devices, browsers, or private windows. Each browser starts with an empty account list.
-- **The first account created on a device gets DEV ACCESS**, and no account created after it does. Since the list starts empty per browser, this makes the owner account the dev account on the owner's machine — it does not stop someone from being "first" in their own browser.
-- Anyone who can open the developer console on their own machine can edit what's stored there, and this repo is public, so the source is readable too. Dev access is a convenience switch, not a security boundary. Don't reuse a real password.
+- Scores are **append-only**. There is a select policy and an insert policy and deliberately no update or delete policy, so nobody can rewrite or quietly remove a run, including their own.
+- The name on a score is **stamped from your profile by a trigger**, not taken from the request, so a hand-rolled POST cannot post under someone else's name.
+- **The first profile ever created gets dev access**, decided by a `before insert` trigger that ignores whatever the client sent. Profiles have no update policy at all — with one, any signed-in user could simply PATCH themselves the dev flag.
+
+Accounts are username + password, as they always were. Supabase Auth is email-based, so the username is mapped onto a synthetic address on a domain that receives no mail — which is why **"Confirm email" has to be off** in the project's auth settings; there is no inbox to confirm from.
+
+**Everything degrades.** If the network is down, the project is paused, or the schema has not been applied, calls fail softly: a stored session still signs you in from cache, runs are always recorded locally first so one is never lost to a dropped connection, and a leaderboard that cannot reach the server falls back to this device's scores — with the panel label saying **This device** rather than **World**, so a device board never masquerades as a global one.
+
+**Setting up a fresh project** — paste `supabase/schema.sql` into the SQL Editor and run it (it is written to be re-runnable), then turn off Authentication → Sign In / Providers → Email → Confirm email.
 
 **Continue as guest** skips sign-in entirely and goes straight to the library, with no dev access and no play tracking.
 
@@ -57,7 +63,7 @@ All 7 tetrominoes in their classic colors, plus three **helper pieces** — a si
 
 **Winning.** Clearing **100 lines** wins the run. The win screen is a milestone, not a full stop — carrying on keeps the same board and score going.
 
-**Leaderboard.** The top 10 runs are kept under `arcade.scores.v1`, shared with the launcher's account system: signed in, runs are filed under your name; otherwise they go down as Guest. Wins are starred. Like everything else here it is per-browser, not global.
+**Leaderboard.** Global, shared with 2048 and filed under your account name; signed out, runs go down as Guest and stay on the device. Wins are starred, and the panel label says whether you are looking at the world board or this device's.
 
 | Key | Action |
 | --- | --- |
@@ -76,7 +82,7 @@ Slide the 4×4 grid with the arrows, WASD, or a swipe; equal tiles merge and the
 
 One direction is implemented — sliding a line toward index 0 — and the four directions are expressed as different ways of reading lines out of the grid, because four hand-written copies of merge logic is exactly where the bugs live. A freshly merged tile is inert for the rest of that slide, so `2 2 4` becomes `4 4` rather than `8`.
 
-Same leaderboard as Tetris, under `arcade.scores.v1`.
+Same global leaderboard as Tetris.
 
 ## Void Signal
 

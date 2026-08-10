@@ -3844,21 +3844,21 @@ Wherever the signal was going, you're already there.
   // of the state section, the two DEV PANEL markup blocks, the DEV PANEL css
   // block, and 'dev' from the two tab-name arrays.
 
-  // Only the owner account gets these. The launcher (index.html) marks the
-  // first account created on a device as the owner and stores it under
-  // 'arcade.accounts.v1'; anyone signed in as anyone else — or playing as a
-  // guest, or landing on this file directly — never sees the tab. This is a
-  // convenience gate, not a security boundary: the source is public and the
-  // flag lives in localStorage, so treat it as "hidden", not "protected".
+  // Only the owner account gets these. The dev flag is decided server-side —
+  // the database hands it to the first profile ever created and refuses to
+  // let anyone set it themselves (see supabase/schema.sql) — and the launcher
+  // caches the signed-in profile under 'nova.auth.v1'. Anyone else, a guest,
+  // or someone opening this file directly never sees the tab.
+  //
+  // Reading the cache rather than asking the server keeps this synchronous
+  // and offline-proof. It also means this particular check is still only a
+  // convenience gate: the source is public and the cache is editable, so
+  // treat the tab as "hidden", not "protected". What the flag actually
+  // protects server-side — nothing, currently — is the part that counts.
   function devAccess() {
     try {
-      const s = JSON.parse(localStorage.getItem('arcade.session.v1') || 'null');
-      if (!s || s.guest || !s.id) return false;
-      const db = JSON.parse(localStorage.getItem('arcade.accounts.v1') || 'null');
-      if (!db || !Array.isArray(db.users)) return false;
-      for (let i = 0; i < db.users.length; i++) {
-        if (db.users[i].id === s.id) return !!db.users[i].dev;
-      }
+      const auth = JSON.parse(localStorage.getItem('nova.auth.v1') || 'null');
+      return !!(auth && auth.user && auth.user.isDev);
     } catch (e) { /* storage blocked or corrupt — no dev tools, play on */ }
     return false;
   }

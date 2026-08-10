@@ -258,7 +258,7 @@
     </div>
 
     <div class="card">
-      <div class="label">Leaderboard</div>
+      <div class="label" id="boardlabel">Leaderboard</div>
       <div class="scores" id="scores"></div>
     </div>
 
@@ -275,6 +275,7 @@
   </div>
 </div>
 
+<script src="nova.js"></script>
 <script>
 (function () {
   'use strict';
@@ -332,6 +333,7 @@
   const HELPERS = ['P', 'D', 'V'];
 
   const WIN_LINES = 100;
+  const GAME_ID = 'tetris';           // key on the shared leaderboard
 
   const LINE_SCORES = [0, 100, 300, 500, 800];
   const KICKS = [0, -1, 1, -2, 2];
@@ -357,6 +359,7 @@
     level: document.getElementById('level'),
     lines: document.getElementById('lines'),
     scores: document.getElementById('scores'),
+    boardLabel: document.getElementById('boardlabel'),
     overlay: document.getElementById('overlay'),
     ovTitle: document.getElementById('ov-title'),
     ovSub: document.getElementById('ov-sub'),
@@ -749,95 +752,72 @@
   }
 
   // ----------------------------------------------------------- leaderboard
-  // Shared with the launcher and the other games under one key, so a single
-  // board can show every game later. Storage is per-browser — there is no
-  // server — so this is a scoreboard for whoever plays on this machine, not a
-  // global ranking.
+  // The board is global. Nova posts to the shared server table and reads the
+  // top rows back; it also always records the run locally, so a dropped
+  // connection never loses one and a signed-out player still gets a board.
+  // The panel label says which of the two you are looking at rather than
+  // quietly showing a device board that looks worldwide.
 
-  const SCORES_KEY = 'arcade.scores.v1';
-  const GAME_ID = 'tetris';
-  const KEEP_SCORES = 10;
+  var boardIsGlobal = false;
 
-  function readDB() {
-    try {
-      const raw = localStorage.getItem(SCORES_KEY);
-      const db = raw ? JSON.parse(raw) : null;
-      return (db && typeof db === 'object') ? db : {};
-    } catch (e) { return {}; }
-  }
-
-  function loadScores() {
-    const list = readDB()[GAME_ID];
-    return Array.isArray(list) ? list : [];
-  }
-
-  function saveScores(list) {
-    try {
-      const db = readDB();
-      db[GAME_ID] = list;
-      localStorage.setItem(SCORES_KEY, JSON.stringify(db));
-    } catch (e) { /* storage blocked — the run still counts on screen */ }
-  }
-
-  // Whoever is signed in to the launcher. Reads the same keys index.html
-  // writes; anyone playing this file straight is simply "Guest".
   function playerName() {
-    try {
-      const s = JSON.parse(localStorage.getItem('arcade.session.v1') || 'null');
-      if (!s || s.guest || !s.id) return 'Guest';
-      const db = JSON.parse(localStorage.getItem('arcade.accounts.v1') || 'null');
-      if (!db || !Array.isArray(db.users)) return 'Guest';
-      for (let i = 0; i < db.users.length; i++) {
-        if (db.users[i].id === s.id) return db.users[i].name;
-      }
-    } catch (e) { /* fall through */ }
-    return 'Guest';
+    var u = window.Nova && window.Nova.user();
+    return u ? u.username : 'Guest';
   }
 
-  // Returns the 1-based place this run took, or null if it missed the board.
-  function submitScore(didWin) {
-    if (score <= 0) return null;
-    const entry = {
-      name: playerName(), score: score, lines: lines,
-      level: level, won: !!didWin, at: Date.now()
-    };
-    const list = loadScores();
-    list.push(entry);
-    // Ties go to whoever got there first.
-    list.sort(function (a, b) { return (b.score - a.score) || (a.at - b.at); });
-    const top = list.slice(0, KEEP_SCORES);
-    saveScores(top);
-    renderScores(entry);
-    const place = top.indexOf(entry);
-    return place >= 0 ? place + 1 : null;
+  function refreshBoard(highlight) {
+    return window.Nova.topScores(GAME_ID, 10).then(function (res) {
+      boardIsGlobal = res.global;
+      el.boardLabel.textContent = res.global ? 'Leaderboard · World' : 'Leaderboard · This device';
+      renderScores(res.rows, highlight);
+      return res;
+    });
   }
 
-  function renderScores(highlight) {
-    const host = el.scores;
-    const list = loadScores();
+  // Returns the 1-based place this run took on the board it landed on, or
+  // null if it missed. Matching on name+score is enough here: the only way to
+  // collide is the same player posting the identical score twice, which lands
+  // on the same rank anyway.
+  function postRun(meta) {
+    if (score <= 0) return Promise.resolve(null);
+    var mine = { name: playerName(), score: score };
+    return window.Nova.submitScore(GAME_ID, score, meta)
+      .then(function () { return refreshBoard(mine); })
+      .then(function (res) {
+        for (var i = 0; i < res.rows.length; i++) {
+          if (res.rows[i].score === mine.score && res.rows[i].name === mine.name) return i + 1;
+        }
+        return null;
+      })
+      .catch(function () { return null; });
+  }
+
+  function renderScores(rows, highlight) {
+    var host = el.scores;
     host.innerHTML = '';
 
-    if (!list.length) {
-      const empty = document.createElement('div');
+    if (!rows || !rows.length) {
+      var empty = document.createElement('div');
       empty.className = 'score-empty';
       empty.textContent = 'No runs yet';
       host.appendChild(empty);
       return;
     }
 
-    list.slice(0, 5).forEach(function (entry, i) {
-      const row = document.createElement('div');
-      row.className = 'score-row' + (entry === highlight ? ' new' : '') + (entry.won ? ' won' : '');
+    rows.slice(0, 5).forEach(function (entry, i) {
+      var mine = highlight && entry.name === highlight.name && entry.score === highlight.score;
+      var row = document.createElement('div');
+      row.className = 'score-row' + (mine ? ' new' : '') + (entry.won ? ' won' : '');
 
-      const rank = document.createElement('span');
+      var rank = document.createElement('span');
       rank.className = 'score-rank';
       rank.textContent = (i + 1);
 
-      const name = document.createElement('span');
+      var name = document.createElement('span');
       name.className = 'score-name';
       name.textContent = entry.name;
 
-      const val = document.createElement('span');
+      var val = document.createElement('span');
       val.className = 'score-val';
       val.textContent = entry.score;
 
@@ -848,39 +828,41 @@
     });
   }
 
-  // ------------------------------------------------------------ end states
-
   function placeText(place) {
     if (!place) return '';
-    return '<br>' + (place === 1 ? 'New best on this machine!' : 'Number ' + place + ' on the board');
+    var where = boardIsGlobal ? 'in the world' : 'on this device';
+    return '<br>' + (place === 1 ? 'Number 1 ' + where + '!' : 'Number ' + place + ' ' + where);
+  }
+
+  // ------------------------------------------------------------ end states
+
+  // The overlay goes up immediately with what is already known, and the
+  // placing is filled in when the board answers — a run should never wait on
+  // the network to tell you it ended.
+  function endRun(didWin, title, base, hint) {
+    dasDir = 0;
+    softDrop = false;
+    best = Math.max(best, score);
+    showOverlay(title, base, hint);
+    const at = state;
+    postRun({ won: didWin, lines: lines, level: level }).then(function (place) {
+      if (place && state === at) el.ovSub.innerHTML = base + placeText(place);
+    });
   }
 
   function win() {
     state = 'won';
-    dasDir = 0;
-    softDrop = false;
-    best = Math.max(best, score);
-    const place = submitScore(true);
-    showOverlay(
-      'You Win',
-      WIN_LINES + ' lines cleared.<br>Score <b>' + score + '</b> &nbsp;·&nbsp; Level ' +
-      level + placeText(place),
-      'Press Enter to keep playing'
-    );
+    endRun(true, 'You Win',
+      WIN_LINES + ' lines cleared.<br>Score <b>' + score + '</b> &nbsp;·&nbsp; Level ' + level,
+      'Press Enter to keep playing');
   }
 
   function gameOver() {
     state = 'over';
-    dasDir = 0;
-    softDrop = false;
-    best = Math.max(best, score);
-    const place = submitScore(false);
-    showOverlay(
-      'Game Over',
+    endRun(false, 'Game Over',
       'Score <b>' + score + '</b> &nbsp;·&nbsp; Level ' + level +
-      ' &nbsp;·&nbsp; ' + lines + ' lines<br>Best this session: ' + best + placeText(place),
-      'Press Enter to restart'
-    );
+      ' &nbsp;·&nbsp; ' + lines + ' lines<br>Best this session: ' + best,
+      'Press Enter to restart');
   }
 
   // Carrying on after a win keeps the same run going — the score stays, and
@@ -1007,6 +989,7 @@
   }
 
   reset();
+  refreshBoard();                        // fills the panel before the first run ends
   requestAnimationFrame(frame);
 })();
 </script>

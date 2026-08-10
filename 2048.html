@@ -207,7 +207,7 @@
     </div>
 
     <div class="card">
-      <div class="label">Leaderboard</div>
+      <div class="label" id="boardlabel">Leaderboard</div>
       <div class="scores" id="scores"></div>
     </div>
 
@@ -223,6 +223,7 @@
   </div>
 </div>
 
+<script src="nova.js"></script>
 <script>
 (function () {
   'use strict';
@@ -232,7 +233,6 @@
   const SIZE = 4;
   const WIN_VALUE = 2048;
   const GAP = 12;                        // px between cells, matches the CSS
-  const SCORES_KEY = 'arcade.scores.v1';
   const BEST_KEY = 'arcade.2048.best';
   const GAME_ID = '2048';
   const KEEP_SCORES = 10;
@@ -243,6 +243,7 @@
     best: document.getElementById('best'),
     top: document.getElementById('toptile'),
     scores: document.getElementById('scores'),
+    boardLabel: document.getElementById('boardlabel'),
     overlay: document.getElementById('overlay'),
     ovTitle: document.getElementById('ov-title'),
     ovSub: document.getElementById('ov-sub'),
@@ -422,84 +423,86 @@
   }
 
   // ----------------------------------------------------------- leaderboard
+  // The board is global. Nova posts to the shared server table and reads the
+  // top rows back; it also always records the run locally, so a dropped
+  // connection never loses one and a signed-out player still gets a board.
+  // The panel label says which of the two you are looking at rather than
+  // quietly showing a device board that looks worldwide.
 
-  function readDB() {
-    try {
-      const raw = localStorage.getItem(SCORES_KEY);
-      const db = raw ? JSON.parse(raw) : null;
-      return (db && typeof db === 'object') ? db : {};
-    } catch (e) { return {}; }
-  }
-
-  function loadScores() {
-    const list = readDB()[GAME_ID];
-    return Array.isArray(list) ? list : [];
-  }
-
-  function saveScores(list) {
-    try {
-      const db = readDB();
-      db[GAME_ID] = list;
-      localStorage.setItem(SCORES_KEY, JSON.stringify(db));
-    } catch (e) { /* storage blocked — the run still counts on screen */ }
-  }
+  var boardIsGlobal = false;
 
   function playerName() {
-    try {
-      const s = JSON.parse(localStorage.getItem('arcade.session.v1') || 'null');
-      if (!s || s.guest || !s.id) return 'Guest';
-      const db = JSON.parse(localStorage.getItem('arcade.accounts.v1') || 'null');
-      if (!db || !Array.isArray(db.users)) return 'Guest';
-      for (let i = 0; i < db.users.length; i++) {
-        if (db.users[i].id === s.id) return db.users[i].name;
-      }
-    } catch (e) { /* fall through */ }
-    return 'Guest';
+    var u = window.Nova && window.Nova.user();
+    return u ? u.username : 'Guest';
   }
 
-  function submitScore(didWin) {
-    if (score <= 0) return null;
-    const entry = {
-      name: playerName(), score: score, top: topTile(),
-      won: !!didWin, at: Date.now()
-    };
-    const list = loadScores();
-    list.push(entry);
-    list.sort(function (a, b) { return (b.score - a.score) || (a.at - b.at); });
-    const top = list.slice(0, KEEP_SCORES);
-    saveScores(top);
-    renderScores(entry);
-    const place = top.indexOf(entry);
-    return place >= 0 ? place + 1 : null;
+  function refreshBoard(highlight) {
+    return window.Nova.topScores(GAME_ID, 10).then(function (res) {
+      boardIsGlobal = res.global;
+      el.boardLabel.textContent = res.global ? 'Leaderboard · World' : 'Leaderboard · This device';
+      renderScores(res.rows, highlight);
+      return res;
+    });
   }
 
-  function renderScores(highlight) {
-    const list = loadScores();
-    el.scores.innerHTML = '';
+  // Returns the 1-based place this run took on the board it landed on, or
+  // null if it missed. Matching on name+score is enough here: the only way to
+  // collide is the same player posting the identical score twice, which lands
+  // on the same rank anyway.
+  function postRun(meta) {
+    if (score <= 0) return Promise.resolve(null);
+    var mine = { name: playerName(), score: score };
+    return window.Nova.submitScore(GAME_ID, score, meta)
+      .then(function () { return refreshBoard(mine); })
+      .then(function (res) {
+        for (var i = 0; i < res.rows.length; i++) {
+          if (res.rows[i].score === mine.score && res.rows[i].name === mine.name) return i + 1;
+        }
+        return null;
+      })
+      .catch(function () { return null; });
+  }
 
-    if (!list.length) {
-      const empty = document.createElement('div');
+  function renderScores(rows, highlight) {
+    var host = el.scores;
+    host.innerHTML = '';
+
+    if (!rows || !rows.length) {
+      var empty = document.createElement('div');
       empty.className = 'score-empty';
       empty.textContent = 'No runs yet';
-      el.scores.appendChild(empty);
+      host.appendChild(empty);
       return;
     }
 
-    list.slice(0, 5).forEach(function (entry, i) {
-      const row = document.createElement('div');
-      row.className = 'score-row' + (entry === highlight ? ' new' : '') + (entry.won ? ' won' : '');
-      const rank = document.createElement('span');
+    rows.slice(0, 5).forEach(function (entry, i) {
+      var mine = highlight && entry.name === highlight.name && entry.score === highlight.score;
+      var row = document.createElement('div');
+      row.className = 'score-row' + (mine ? ' new' : '') + (entry.won ? ' won' : '');
+
+      var rank = document.createElement('span');
       rank.className = 'score-rank';
       rank.textContent = (i + 1);
-      const name = document.createElement('span');
+
+      var name = document.createElement('span');
       name.className = 'score-name';
       name.textContent = entry.name;
-      const val = document.createElement('span');
+
+      var val = document.createElement('span');
       val.className = 'score-val';
       val.textContent = entry.score;
-      row.appendChild(rank); row.appendChild(name); row.appendChild(val);
-      el.scores.appendChild(row);
+
+      row.appendChild(rank);
+      row.appendChild(name);
+      row.appendChild(val);
+      host.appendChild(row);
     });
+  }
+
+  function placeText(place) {
+    if (!place) return '';
+    var where = boardIsGlobal ? 'in the world' : 'on this device';
+    return '<br>' + (place === 1 ? 'Number 1 ' + where + '!' : 'Number ' + place + ' ' + where);
   }
 
   // ------------------------------------------------------------ end states
@@ -513,24 +516,28 @@
 
   function hideOverlay() { el.overlay.classList.remove('show'); }
 
-  function placeText(place) {
-    if (!place) return '';
-    return '<br>' + (place === 1 ? 'New best on this machine!' : 'Number ' + place + ' on the board');
+  // The overlay goes up immediately with what is already known, and the
+  // placing is filled in when the board answers — a run should never wait on
+  // the network to tell you it ended.
+  function endRun(didWin, title, base, hint) {
+    showOverlay(title, base, hint);
+    const at = state;
+    postRun({ won: didWin, top: topTile() }).then(function (place) {
+      if (place && state === at) el.ovSub.innerHTML = base + placeText(place);
+    });
   }
 
   function win() {
     state = 'won';
-    const place = submitScore(true);
-    showOverlay('2048', 'You made the tile.<br>Score <b>' + score + '</b>' + placeText(place),
-                'Press Enter to keep going');
+    endRun(true, '2048', 'You made the tile.<br>Score <b>' + score + '</b>',
+           'Press Enter to keep going');
   }
 
   function gameOver() {
     state = 'over';
-    const place = submitScore(won);
-    showOverlay('Game Over', 'No moves left.<br>Score <b>' + score +
-                '</b> &nbsp;·&nbsp; Top tile ' + topTile() + placeText(place),
-                'Press Enter to restart');
+    endRun(won, 'Game Over',
+           'No moves left.<br>Score <b>' + score + '</b> &nbsp;·&nbsp; Top tile ' + topTile(),
+           'Press Enter to restart');
   }
 
   // Carrying on after 2048 keeps the same board and score — the win is a
@@ -574,7 +581,6 @@
     addRandomTile();
     hideOverlay();
     render();
-    renderScores(null);
   }
 
   // ----------------------------------------------------------------- input
@@ -633,6 +639,7 @@
 
   best = loadBest();
   reset();
+  refreshBoard();                        // fills the panel before the first run ends
 })();
 </script>
 </body>

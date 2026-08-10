@@ -520,8 +520,9 @@
       </div>
 
       <div class="auth-note" id="firstnote" hidden>
-        No accounts on this device yet — the <b>first account created</b> is the
-        owner account and is the only one that gets <b>DEV ACCESS</b>.
+        Your name and scores are kept on the server, so they follow you to any
+        browser or device. The <b>first account ever created</b> is the owner
+        account and the only one that gets <b>DEV ACCESS</b>.
       </div>
 
       <div class="auth-err mono" id="autherr"></div>
@@ -643,9 +644,9 @@
         <div class="infocard">
           <h3>Profile</h3>
           <div class="inforow"><span>Username</span><b id="i-name">—</b></div>
-          <div class="inforow"><span>Created</span><b id="i-created">—</b></div>
+          <div class="inforow"><span>Account</span><b id="i-created">—</b></div>
           <div class="inforow"><span>Dev access</span><b id="i-dev">—</b></div>
-          <div class="inforow"><span>Accounts on device</span><b id="i-count">—</b></div>
+          <div class="inforow"><span>Leaderboard</span><b id="i-count">—</b></div>
         </div>
 
         <div class="infocard">
@@ -655,184 +656,53 @@
       </div>
 
       <div class="warn">
-        <b>Heads up:</b> accounts live in this browser's local storage — there is no
-        server behind them. They do not sync between devices or browsers, and anyone
-        who can open the developer console on their own machine can change what is
-        stored there. Treat dev access as a convenience switch, not a security
-        boundary, and don't reuse a real password here.
+        <b>Heads up:</b> accounts and scores live on a Supabase project shared by
+        everyone who plays, so they follow you between browsers and devices. The
+        rules that matter are enforced on the server: the board is append-only,
+        your name is stamped onto a score by the database rather than sent by
+        this page, and dev access is decided there too. It is still a hobby
+        project rather than a bank — don't reuse a real password here.
       </div>
     </section>
   </main>
 </div>
 
+<script src="nova.js"></script>
 <script>
 (function () {
   'use strict';
 
   var $ = function (id) { return document.getElementById(id); };
 
-  // ============================================================== storage
+  // ============================================================== accounts
+  // Accounts and the leaderboard live on the server now (see nova.js and
+  // supabase/schema.sql). What used to be here — a localStorage user table
+  // with hand-rolled password hashing — is gone: it only ever worked on the
+  // one browser that created it, which is exactly what the server fixes.
 
-  var ACCOUNTS_KEY = 'arcade.accounts.v1';
-  var SESSION_KEY  = 'arcade.session.v1';
+  var N = window.Nova;
+  var PLAYS_KEY = 'nova.plays.v1';
 
-  var storageOK = true;
-  try {
-    localStorage.setItem('arcade.probe', '1');
-    localStorage.removeItem('arcade.probe');
-  } catch (e) { storageOK = false; }
-
-  function readJSON(key, fallback) {
-    if (!storageOK) return fallback;
-    try {
-      var raw = localStorage.getItem(key);
-      return raw ? JSON.parse(raw) : fallback;
-    } catch (e) { return fallback; }
+  function readJSON(key) {
+    try { var raw = localStorage.getItem(key); return raw ? JSON.parse(raw) : null; }
+    catch (e) { return null; }
   }
 
-  function writeJSON(key, val) {
-    if (!storageOK) return false;
-    try { localStorage.setItem(key, JSON.stringify(val)); return true; }
+  function writeJSON(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); return true; }
     catch (e) { return false; }
   }
 
-  function loadAccounts() {
-    var db = readJSON(ACCOUNTS_KEY, null);
-    if (!db || !Array.isArray(db.users)) return { v: 1, users: [] };
-    return db;
-  }
+  // Purely cosmetic ("played today"), so it stays on the device rather than
+  // spending a table on it.
+  function loadPlays() { return readJSON(PLAYS_KEY) || {}; }
 
-  function saveAccounts(db) { return writeJSON(ACCOUNTS_KEY, db); }
-
-  // ================================================================ sha256
-  // Hand-rolled rather than crypto.subtle because that is only exposed in
-  // secure contexts — the Electron wrapper loads this over file://, where it
-  // is missing, and a login that works on the site but not in the desktop
-  // build would be a nasty surprise. Passwords are salted and stretched so a
-  // glance at localStorage doesn't hand over the plaintext; see the warning
-  // in the account view for what this does and does not buy.
-
-  var K = [
-    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
-    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
-    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
-    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
-    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
-    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
-    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
-    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
-  ];
-
-  function utf8Bytes(str) {
-    var out = [], i, c;
-    for (i = 0; i < str.length; i++) {
-      c = str.charCodeAt(i);
-      if (c < 0x80) out.push(c);
-      else if (c < 0x800) { out.push(0xc0 | (c >> 6), 0x80 | (c & 63)); }
-      else if (c < 0xd800 || c >= 0xe000) { out.push(0xe0 | (c >> 12), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63)); }
-      else {
-        i++;
-        c = 0x10000 + (((c & 0x3ff) << 10) | (str.charCodeAt(i) & 0x3ff));
-        out.push(0xf0 | (c >> 18), 0x80 | ((c >> 12) & 63), 0x80 | ((c >> 6) & 63), 0x80 | (c & 63));
-      }
-    }
-    return out;
-  }
-
-  function sha256(str) {
-    var h = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
-    var bytes = utf8Bytes(str);
-    var bitLen = bytes.length * 8;
-
-    bytes.push(0x80);
-    while (bytes.length % 64 !== 56) bytes.push(0);
-    // Length is written as a 64-bit big-endian value; the high word stays 0
-    // since nothing hashed here comes close to 2^32 bits.
-    bytes.push(0, 0, 0, 0);
-    bytes.push((bitLen >>> 24) & 255, (bitLen >>> 16) & 255, (bitLen >>> 8) & 255, bitLen & 255);
-
-    var w = new Array(64), i, j, a, b, c, d, e, f, g, hh, s0, s1, ch, maj, t1, t2;
-
-    for (i = 0; i < bytes.length; i += 64) {
-      for (j = 0; j < 16; j++) {
-        w[j] = (bytes[i + j * 4] << 24) | (bytes[i + j * 4 + 1] << 16) |
-               (bytes[i + j * 4 + 2] << 8) | bytes[i + j * 4 + 3];
-      }
-      for (j = 16; j < 64; j++) {
-        s0 = ((w[j-15] >>> 7) | (w[j-15] << 25)) ^ ((w[j-15] >>> 18) | (w[j-15] << 14)) ^ (w[j-15] >>> 3);
-        s1 = ((w[j-2] >>> 17) | (w[j-2] << 15)) ^ ((w[j-2] >>> 19) | (w[j-2] << 13)) ^ (w[j-2] >>> 10);
-        w[j] = (w[j-16] + s0 + w[j-7] + s1) | 0;
-      }
-
-      a = h[0]; b = h[1]; c = h[2]; d = h[3]; e = h[4]; f = h[5]; g = h[6]; hh = h[7];
-
-      for (j = 0; j < 64; j++) {
-        s1 = ((e >>> 6) | (e << 26)) ^ ((e >>> 11) | (e << 21)) ^ ((e >>> 25) | (e << 7));
-        ch = (e & f) ^ (~e & g);
-        t1 = (hh + s1 + ch + K[j] + w[j]) | 0;
-        s0 = ((a >>> 2) | (a << 30)) ^ ((a >>> 13) | (a << 19)) ^ ((a >>> 22) | (a << 10));
-        maj = (a & b) ^ (a & c) ^ (b & c);
-        t2 = (s0 + maj) | 0;
-        hh = g; g = f; f = e; e = (d + t1) | 0;
-        d = c; c = b; b = a; a = (t1 + t2) | 0;
-      }
-
-      h[0] = (h[0] + a) | 0; h[1] = (h[1] + b) | 0; h[2] = (h[2] + c) | 0; h[3] = (h[3] + d) | 0;
-      h[4] = (h[4] + e) | 0; h[5] = (h[5] + f) | 0; h[6] = (h[6] + g) | 0; h[7] = (h[7] + hh) | 0;
-    }
-
-    var hex = '';
-    for (i = 0; i < 8; i++) hex += ('00000000' + (h[i] >>> 0).toString(16)).slice(-8);
-    return hex;
-  }
-
-  var STRETCH = 4000;
-
-  function hashPassword(pw, salt) {
-    var v = sha256(salt + '|' + pw);
-    for (var i = 0; i < STRETCH; i++) v = sha256(v + salt);
-    return v;
-  }
-
-  function randomSalt() {
-    var bytes = new Uint8Array(16), i, out = '';
-    if (window.crypto && window.crypto.getRandomValues) window.crypto.getRandomValues(bytes);
-    else for (i = 0; i < 16; i++) bytes[i] = Math.floor(Math.random() * 256);
-    for (i = 0; i < 16; i++) out += ('0' + bytes[i].toString(16)).slice(-2);
-    return out;
-  }
-
-  // ================================================================ session
-
-  var session = null;   // { guest: true } or a user object from the db
-
-  function loadSession() {
-    var s = readJSON(SESSION_KEY, null);
-    if (!s) return null;
-    if (s.guest) return { guest: true };
-    var users = loadAccounts().users, i;
-    for (i = 0; i < users.length; i++) if (users[i].id === s.id) return users[i];
-    return null;                                  // account was removed underneath us
-  }
-
-  function setSession(user) {
-    session = user;
-    if (!user) writeJSON(SESSION_KEY, null);
-    else if (user.guest) writeJSON(SESSION_KEY, { guest: true, at: Date.now() });
-    else writeJSON(SESSION_KEY, { id: user.id, at: Date.now() });
-  }
-
-  function persistUser(user) {
-    var db = loadAccounts(), i;
-    for (i = 0; i < db.users.length; i++) {
-      if (db.users[i].id === user.id) { db.users[i] = user; break; }
-    }
-    saveAccounts(db);
-  }
+  var session = null;            // Nova user object, { guest: true }, or null
 
   // =================================================================== auth
 
   var mode = 'signin';
+  var busy = false;
 
   function setMode(next) {
     mode = next;
@@ -841,44 +711,27 @@
     $('tabcreate').classList.toggle('on', creating);
     $('confirmfield').hidden = !creating;
     $('authsubmit').textContent = creating ? 'Create account' : 'Sign in';
-    $('authtagline').textContent = creating ? 'Claim a profile on this device' : 'Sign in to your library';
+    $('authtagline').textContent = creating ? 'Claim a name on the leaderboard' : 'Sign in to your library';
     $('fpass').setAttribute('autocomplete', creating ? 'new-password' : 'current-password');
-    $('firstnote').hidden = !(creating && loadAccounts().users.length === 0);
+    $('firstnote').hidden = !creating;
     $('autherr').textContent = '';
   }
 
-  function fail(msg) { $('autherr').textContent = msg; }
-
-  function doSignIn(name, pass) {
-    var users = loadAccounts().users, lower = name.toLowerCase(), i, u = null;
-    for (i = 0; i < users.length; i++) if (users[i].lower === lower) { u = users[i]; break; }
-    if (!u) return fail('No account by that name on this device.');
-    if (hashPassword(pass, u.salt) !== u.hash) return fail('Wrong password.');
-    u.lastSeen = Date.now();
-    persistUser(u);
-    setSession(u);
-    enterShell();
+  function fail(msg) {
+    $('autherr').textContent = msg;
+    busy = false;
+    $('authsubmit').textContent = mode === 'create' ? 'Create account' : 'Sign in';
   }
 
-  function doCreate(name, pass, pass2) {
-    var db = loadAccounts(), lower = name.toLowerCase(), i;
-    if (!/^[A-Za-z0-9 _-]{3,16}$/.test(name)) return fail('Username: 3–16 characters, letters/numbers/space/_/- only.');
-    if (pass.length < 6) return fail('Password must be at least 6 characters.');
-    if (pass !== pass2) return fail('Passwords do not match.');
-    for (i = 0; i < db.users.length; i++) if (db.users[i].lower === lower) return fail('That name is already taken on this device.');
+  function working(label) {
+    busy = true;
+    $('autherr').textContent = '';
+    $('authsubmit').textContent = label;
+  }
 
-    var salt = randomSalt();
-    // The owner rule: whoever registers first on this device holds dev access,
-    // and nobody after them does.
-    var user = {
-      id: 'u' + Date.now().toString(36) + Math.floor(Math.random() * 1e6).toString(36),
-      name: name, lower: lower, salt: salt, hash: hashPassword(pass, salt),
-      dev: db.users.length === 0,
-      created: Date.now(), lastSeen: Date.now(), plays: {}
-    };
-    db.users.push(user);
-    if (!saveAccounts(db)) return fail('This browser is blocking local storage, so accounts cannot be saved.');
-    setSession(user);
+  function onSignedIn(user) {
+    busy = false;
+    session = user;
     enterShell();
   }
 
@@ -887,26 +740,36 @@
 
   $('authform').addEventListener('submit', function (e) {
     e.preventDefault();
+    if (busy) return;
+
     var name = $('fname').value.trim(), pass = $('fpass').value;
     if (!name) return fail('Enter a username.');
     if (!pass) return fail('Enter a password.');
-    if (mode === 'create') doCreate(name, pass, $('fpass2').value);
-    else doSignIn(name, pass);
+
+    if (mode === 'create') {
+      if (pass !== $('fpass2').value) return fail('Passwords do not match.');
+      working('Creating…');
+      N.signUp(name, pass).then(onSignedIn).catch(function (err) { fail(err.message); });
+    } else {
+      working('Signing in…');
+      N.signIn(name, pass).then(onSignedIn).catch(function (err) { fail(err.message); });
+    }
   });
 
   $('guestbtn').addEventListener('click', function () {
-    setSession({ guest: true });
+    session = { guest: true };
     enterShell();
   });
 
   $('signout').addEventListener('click', function () {
-    setSession(null);
+    N.signOut();
+    session = null;
     $('shell').hidden = true;
     $('authwrap').hidden = false;
     $('fname').value = '';
     $('fpass').value = '';
     $('fpass2').value = '';
-    setMode(loadAccounts().users.length === 0 ? 'create' : 'signin');
+    setMode('signin');
     startAuthFX();
   });
 
@@ -941,22 +804,19 @@
   var IS_DESKTOP = /\bElectron\//i.test(navigator.userAgent || '');
 
   function lastPlayedText(gameId) {
-    if (!session || session.guest || !session.plays || !session.plays[gameId]) {
-      return IS_DESKTOP ? 'Installed' : 'Play in browser';
-    }
-    var days = Math.floor((Date.now() - session.plays[gameId].at) / 86400000);
+    var plays = loadPlays();
+    if (!plays[gameId]) return IS_DESKTOP ? 'Installed' : 'Play in browser';
+    var days = Math.floor((Date.now() - plays[gameId].at) / 86400000);
     if (days <= 0) return 'Played today';
     if (days === 1) return 'Played yesterday';
     return 'Played ' + days + ' days ago';
   }
 
   function launch(game) {
-    if (session && !session.guest) {
-      if (!session.plays) session.plays = {};
-      var prev = session.plays[game.id] || { count: 0 };
-      session.plays[game.id] = { at: Date.now(), count: (prev.count || 0) + 1 };
-      persistUser(session);
-    }
+    var plays = loadPlays();
+    var prev = plays[game.id] || { count: 0 };
+    plays[game.id] = { at: Date.now(), count: (prev.count || 0) + 1 };
+    writeJSON(PLAYS_KEY, plays);
     window.location.href = game.file;
   }
 
@@ -1219,28 +1079,22 @@
     if (b.dataset.view) b.addEventListener('click', function () { showView(b.dataset.view); });
   });
 
-  function fmtDate(ms) {
-    if (!ms) return '—';
-    var d = new Date(ms);
-    return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2);
-  }
-
   function buildAccount() {
     var guest = !session || session.guest;
-    $('acctsub2').textContent = guest ? 'Guest session' : 'Local profile';
-    $('i-name').textContent = guest ? 'Guest' : session.name;
-    $('i-created').textContent = guest ? '—' : fmtDate(session.created);
+    $('acctsub2').textContent = guest ? 'Guest session' : 'Signed in';
+    $('i-name').textContent = guest ? 'Guest' : session.username;
+    $('i-created').textContent = guest ? 'Not signed in' : 'Server account';
 
     var dev = $('i-dev');
-    dev.textContent = (!guest && session.dev) ? 'Granted' : 'No';
-    dev.className = (!guest && session.dev) ? 'on' : 'off';
+    dev.textContent = (!guest && session.isDev) ? 'Granted' : 'No';
+    dev.className = (!guest && session.isDev) ? 'on' : 'off';
 
-    $('i-count').textContent = loadAccounts().users.length;
+    $('i-count').textContent = guest ? 'Local only' : 'Global';
 
     var plays = $('i-plays');
     plays.innerHTML = '';
     GAMES.forEach(function (game) {
-      var rec = (!guest && session.plays && session.plays[game.id]) || null;
+      var rec = loadPlays()[game.id] || null;
       var row = document.createElement('div');
       row.className = 'inforow';
       var label = document.createElement('span');
@@ -1259,11 +1113,11 @@
     $('shell').hidden = false;
 
     var guest = !session || session.guest;
-    $('avatar').textContent = guest ? 'G' : session.name.charAt(0).toUpperCase();
+    $('avatar').textContent = guest ? 'G' : session.username.charAt(0).toUpperCase();
     $('avatar').classList.toggle('guest', guest);
-    $('acctname').textContent = guest ? 'Guest' : session.name;
+    $('acctname').textContent = guest ? 'Guest' : session.username;
     $('acctsub').textContent = guest ? 'Not signed in' : 'Signed in';
-    $('devbadge').hidden = guest || !session.dev;
+    $('devbadge').hidden = guest || !session.isDev;
 
     buildGrid();
     showView('library');
@@ -1336,18 +1190,17 @@
 
   // =================================================================== boot
 
-  session = loadSession();
-  if (session) {
-    enterShell();
-  } else {
-    setMode(loadAccounts().users.length === 0 ? 'create' : 'signin');
-    startAuthFX();
-    $('fname').focus();
-  }
+  // Show the sign-in screen straight away rather than holding a blank page
+  // while the network answers; a revived session takes over when it lands.
+  setMode('signin');
+  startAuthFX();
+  $('fname').focus();
 
-  if (!storageOK) {
-    $('autherr').textContent = 'Local storage is blocked in this browser — accounts cannot be saved.';
-  }
+  N.restore().then(function (user) {
+    if (!user) return;
+    session = user;
+    enterShell();
+  }).catch(function () { /* stay on the sign-in screen */ });
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', function () {
