@@ -316,14 +316,30 @@
   .card:hover .card-play { opacity: 1; }
 
   /* Cover art, drawn with gradients rather than image files so the launcher
-     stays as self-contained as the games it launches. */
+     stays as self-contained as the games it launches.
+
+     Ring radii are in px, not percentages. Percentage stops in a radial
+     gradient resolve against the distance to the farthest corner, so the same
+     class on a 236x148 card and on a ~1100x300 hero would draw two completely
+     different dishes, and both would shift again on an odd viewport — the
+     same trap as the ovals-on-iPad bug (b7b02fd). The hero gets its own,
+     larger set below, offset to the right so the copy doesn't sit on it. */
   .art-void {
     background:
-      radial-gradient(circle at 50% 58%, rgba(194,69,63,.5) 0 3%, transparent 8%),
-      radial-gradient(circle at 50% 58%, transparent 0 13%, rgba(63,167,160,.4) 13.5% 14.5%, transparent 15%),
-      radial-gradient(circle at 50% 58%, transparent 0 23%, rgba(63,167,160,.28) 23.5% 24.5%, transparent 25%),
-      radial-gradient(circle at 50% 58%, transparent 0 34%, rgba(63,167,160,.16) 34.5% 35.5%, transparent 36%),
+      radial-gradient(circle at 50% 58%, rgba(194,69,63,.55) 0 4px, transparent 7px),
+      radial-gradient(circle at 50% 58%, transparent 0 21px, rgba(63,167,160,.42) 21px 23px, transparent 24px),
+      radial-gradient(circle at 50% 58%, transparent 0 38px, rgba(63,167,160,.28) 38px 40px, transparent 41px),
+      radial-gradient(circle at 50% 58%, transparent 0 55px, rgba(63,167,160,.16) 55px 57px, transparent 58px),
       radial-gradient(ellipse 120% 80% at 50% 120%, rgba(63,167,160,.14), transparent 60%),
+      linear-gradient(180deg, #0a0f13, #06070a);
+  }
+  .hero-art.art-void {
+    background:
+      radial-gradient(circle at 72% 52%, rgba(194,69,63,.55) 0 7px, transparent 12px),
+      radial-gradient(circle at 72% 52%, transparent 0 40px, rgba(63,167,160,.4) 40px 43px, transparent 44px),
+      radial-gradient(circle at 72% 52%, transparent 0 74px, rgba(63,167,160,.26) 74px 77px, transparent 78px),
+      radial-gradient(circle at 72% 52%, transparent 0 108px, rgba(63,167,160,.15) 108px 111px, transparent 112px),
+      radial-gradient(ellipse 90% 90% at 72% 130%, rgba(63,167,160,.13), transparent 62%),
       linear-gradient(180deg, #0a0f13, #06070a);
   }
   .art-void::after {
