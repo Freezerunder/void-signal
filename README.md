@@ -4,7 +4,7 @@ A small launcher and two self-contained retro games. Each is a single HTML file 
 
 | File | What it is |
 | --- | --- |
-| `index.html` | **Void Arcade** — the launcher: sign-in and the game library |
+| `index.html` | **Nova Games** — the launcher: sign-in and the game library |
 | `voidsignal.html` | **Void Signal** — an idle/clicker about a derelict deep-space listening station |
 | `tetris.html` | **Tetris** — the classic, 10×20 |
 
@@ -18,7 +18,7 @@ open ~/my-website/tetris.html      # Tetris
 
 ---
 
-## Void Arcade (the launcher)
+## Nova Games (the launcher)
 
 A sign-in screen and a library, in the spirit of a desktop game launcher: a sidebar with the account chip, a featured banner, and a card per game with when you last played it. Cover art is drawn with CSS gradients rather than image files so the launcher stays as self-contained as the games it launches.
 
@@ -37,7 +37,7 @@ What that means in practice:
 The **Downloads** view offers the launcher itself two ways, on the Epic model — you install the launcher, and every game comes with it.
 
 - **Web app** — installs this page as its own windowed app with its own icon, no installer and no signing warnings, and it keeps working offline after the first load. Chromium browsers get a real **Install** button (via `beforeinstallprompt`); Safari and the rest get the menu path for their browser, since there's no API to trigger it.
-- **Desktop app** — the Electron build in `electron/`, which bundles `index.html`, `voidsignal.html` and `tetris.html` together, so inside the app there is nothing left to download and the cards read **Installed** rather than "Play in browser". The launcher looks up the latest GitHub release at runtime and points the button at the right asset for the visitor's OS, reading the URL off the API response rather than assembling it — `productName` has a space in it, so electron-builder emits names like `Void Arcade Setup 1.0.0.exe`. With no release published it says so plainly instead of linking to an empty page, and if GitHub can't be reached it falls back to the releases page. The answer is cached for the life of the page so switching views doesn't burn the unauthenticated rate limit.
+- **Desktop app** — the Electron build in `electron/`, which bundles `index.html`, `voidsignal.html` and `tetris.html` together, so inside the app there is nothing left to download and the cards read **Installed** rather than "Play in browser". The launcher looks up the latest GitHub release at runtime and points the button at the right asset for the visitor's OS, reading the URL off the API response rather than assembling it — `productName` has a space in it, so electron-builder emits names like `Nova Games Setup 1.0.0.exe`. With no release published it says so plainly instead of linking to an empty page, and if GitHub can't be reached it falls back to the releases page. The answer is cached for the life of the page so switching views doesn't burn the unauthenticated rate limit.
 
 **Publishing a desktop build** (nothing is published yet):
 
@@ -117,6 +117,6 @@ Only visible when the launcher's owner account is signed in — `devBuild()` che
 
 Everything here is tested headlessly with macOS's built-in JavaScriptCore (`jsc`):
 
-- **Void Arcade** — the launcher's real script is evaluated against a DOM stub and driven end to end: the SHA-256 implementation is checked against known vectors (including a multi-byte UTF-8 one), then account creation, the first-account-is-dev rule, every validation and wrong-password path, guest sessions, launch tracking, and a reboot with a stored session. The same suite evaluates `devAccess()` straight out of `voidsignal.html` against the storage the launcher just wrote, covering owner / second account / guest / signed-out / corrupt-storage.
+- **Nova Games** — the launcher's real script is evaluated against a DOM stub and driven end to end: the SHA-256 implementation is checked against known vectors (including a multi-byte UTF-8 one), then account creation, the first-account-is-dev rule, every validation and wrong-password path, guest sessions, launch tracking, and a reboot with a stored session. The same suite evaluates `devAccess()` straight out of `voidsignal.html` against the storage the launcher just wrote, covering owner / second account / guest / signed-out / corrupt-storage.
 - **Tetris** — driving its real key handlers and reading the board back from its own draw calls.
 - **Void Signal** — running its real economy through a 40-day simulated playthrough, plus a horror suite that executes every event branch, all 46 traveller options, all 20 chest outcomes, and the Watcher's click-resolution *and* ignored-timeout paths, against both empty and wealthy stations, asserting no NaN, negative or out-of-range state comes out of any of them, and checking that level thresholds and the GO DARK price stay consistent from level 1 to 120. The Store's purchase/cooldown logic is checked separately, and a DOM-aware pass confirms the upgrades and store lists update their existing rows in place on repaint rather than rebuilding the list from scratch (the fix for a hover-flicker bug).

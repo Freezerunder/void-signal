@@ -1,6 +1,6 @@
 {
-  "name": "Void Arcade",
-  "short_name": "Void Arcade",
+  "name": "Nova Games",
+  "short_name": "Nova Games",
   "description": "A small launcher for the games: Void Signal and Tetris.",
   "start_url": "./",
   "scope": "./",

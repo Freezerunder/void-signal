@@ -1,6 +1,6 @@
 {
-  "name": "void-arcade-desktop",
-  "productName": "Void Arcade",
+  "name": "nova-games-desktop",
+  "productName": "Nova Games",
   "version": "1.0.0",
   "private": true,
   "description": "A small launcher for the games: Void Signal and Tetris.",
@@ -14,8 +14,8 @@
     "electron-builder": "24.13.3"
   },
   "build": {
-    "appId": "com.freezerunder.voidarcade",
-    "productName": "Void Arcade",
+    "appId": "com.freezerunder.novagames",
+    "productName": "Nova Games",
     "icon": "icons/icon-1024.png",
     "directories": {
       "output": "dist"

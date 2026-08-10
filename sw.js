@@ -2,7 +2,7 @@
 // the activate handler below deletes every cache that isn't the current name,
 // so an already-installed PWA drops its cached copy of the old index.html
 // instead of serving the game at the launcher's URL when offline.
-const CACHE_NAME = 'void-arcade-v2';
+const CACHE_NAME = 'nova-games-v3';
 // Deliberately does NOT precache './' or any of the game pages — this is a
 // fast-iterating solo project shipped straight to a live site; precaching them
 // risks pinning a visitor to a stale build if install happens to land during a
