@@ -51,7 +51,11 @@ The builds are unsigned — macOS will call it an unidentified developer and Win
 
 ## Tetris
 
-All 7 tetrominoes in their classic colors, next-piece preview, score / level / lines.
+All 7 tetrominoes in their classic colors, plus three **helper pieces** — a single, a domino and a corner. The bag is still a shuffled 7-bag of tetrominoes; exactly one helper is injected into each bag at a random position, so help lands about once every 8 pieces, often enough to plan around without handing you the board.
+
+**Winning.** Clearing **100 lines** wins the run. The win screen is a milestone, not a full stop — carrying on keeps the same board and score going.
+
+**Leaderboard.** The top 10 runs are kept under `arcade.scores.v1`, shared with the launcher's account system: signed in, runs are filed under your name; otherwise they go down as Guest. Wins are starred. Like everything else here it is per-browser, not global.
 
 | Key | Action |
 | --- | --- |
