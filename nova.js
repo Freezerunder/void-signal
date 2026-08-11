@@ -34,6 +34,17 @@
   var LOCAL_SCORES_KEY = 'arcade.scores.v1';
   var DAILY_KEY = 'nova.daily.v1';
 
+  // Running inside the Electron wrapper rather than a browser tab. The
+  // user-agent is the whole test on purpose: a `file:` protocol check looks
+  // like a reasonable second signal and is actively wrong, because opening
+  // these pages straight off disk in a normal browser (which the README
+  // suggests) is also `file:`. Electron appends Electron/<ver> to the UA and
+  // electron/main.js never overrides it. Lives here rather than in each page
+  // so the four of them cannot drift apart on what counts as the desktop app.
+  var IS_DESKTOP = /\bElectron\//i.test(
+    (typeof navigator !== 'undefined' && navigator.userAgent) || ''
+  );
+
   var auth = null;      // { access_token, refresh_token, expires_at, user }
   var lastError = null;
 
@@ -454,6 +465,7 @@
 
   window.Nova = {
     configured: !!(CONFIG.url && CONFIG.key),
+    isDesktop: IS_DESKTOP,
     restore: restore,
     signUp: signUp,
     signIn: signIn,

@@ -24,6 +24,8 @@ open ~/my-website/2048.html        # 2048
 
 A sign-in screen and a library, in the spirit of a desktop game launcher: a sidebar with the account chip, a featured banner, and a card per game with when you last played it. Cover art is drawn with CSS gradients rather than image files so the launcher stays as self-contained as the games it launches.
 
+**In the desktop app, games open in their own window** and the library stays where it is — there the launcher *is* the app, so navigating it away would leave nowhere to come back to. `electron/main.js` gives those windows the same options as the one they came from, and sends any non-bundled URL to the real browser rather than opening it chrome-less inside the app. In a browser the cards just follow their link, since a popup would fight the tab bar. Tetris and 2048 turn their **← Library** link into "close this window" when they detect the desktop app; Void Signal has no such link, so there it is the window control or ⌘W.
+
 **Accounts and scores live on a server.** A Supabase project backs both, so your name, your dev access and the leaderboards follow you between browsers, devices and the desktop app. `nova.js` is the shared client — the one deliberate exception to the single-file rule here, because four copies of an auth client is four places for them to drift apart. It is loaded as a classic script, not a module, so it still works over `file://` inside the Electron build.
 
 The publishable key sits in public source, which is what that kind of key is for. **Every rule that matters is enforced in the database, not the browser** — see `supabase/schema.sql`:

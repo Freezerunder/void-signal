@@ -790,18 +790,11 @@
     }
   ];
 
-  // Running inside the Electron wrapper rather than a browser tab. Both games
-  // are bundled into that build, so there is nothing to download there — the
-  // Downloads view and the card footers say so instead of offering a button
-  // that would re-download files already sitting on disk.
-  //
-  // The user-agent is the whole test on purpose. A `file:` protocol check
-  // looks like a reasonable second signal and is actively wrong: opening
-  // index.html straight off disk in a normal browser (which the README
-  // suggests) is also `file:`, and that visitor would be told they were
-  // running an app they have not installed. Electron appends Electron/<ver>
-  // to the UA and electron/main.js never overrides it.
-  var IS_DESKTOP = /\bElectron\//i.test(navigator.userAgent || '');
+  // Every game is bundled into the desktop build, so there is nothing to
+  // download there — the Downloads view and the card footers say so instead
+  // of offering a button that would re-download files already on disk. The
+  // detection itself lives in nova.js, shared with the games.
+  var IS_DESKTOP = !!(N && N.isDesktop);
 
   function lastPlayedText(gameId) {
     var plays = loadPlays();
@@ -829,6 +822,16 @@
     var prev = plays[game.id] || { count: 0 };
     plays[game.id] = { at: Date.now(), count: (prev.count || 0) + 1 };
     writeJSON(PLAYS_KEY, plays);
+
+    // In the desktop app the launcher *is* the app: navigating it away leaves
+    // the library nowhere to come back to. Games get their own window instead,
+    // the way a real launcher keeps its storefront open behind what it starts.
+    // In a browser, following the link is what a card should do — a popup
+    // would fight the tab bar and get blocked besides.
+    if (IS_DESKTOP) {
+      window.open(game.file, '_blank');
+      return;
+    }
     window.location.href = game.file;
   }
 
@@ -1134,6 +1137,14 @@
     buildGrid();
     showView('library');
   }
+
+  // With a game running in its own window, the library sitting behind it goes
+  // stale — finish a daily over there and the card still reads "Daily ready".
+  // Rebuilding whenever the launcher comes back to the front is enough, and
+  // costs nothing while it is in the background.
+  window.addEventListener('focus', function () {
+    if (!$('shell').hidden) buildGrid();
+  });
 
   // ================================================================ authfx
   // A quiet drifting starfield behind the sign-in card. Same visual family as
