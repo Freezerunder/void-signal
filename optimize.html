@@ -1200,7 +1200,7 @@ h1 .grad {
       preview: 'notch', tags: ['Free', 'Open source', 'Menu bar'],
       desc: 'Turns the black bar at the top of a MacBook from wasted space into a live control surface — now playing, battery, AirDrop, clipboard and shortcuts, all reachable without leaving what you are doing.',
       dl: 'https://github.com/cshariq/Sapphire/releases/latest', src: 'https://github.com/cshariq/Sapphire',
-      note: 'Ships as <code>Sapphire.pkg</code>. It is not notarised by Apple, so the first launch needs right-click → Open.',
+      note: 'Ships as <code>Sapphire.pkg</code>. On first launch it asks for accessibility and related permissions in System Settings — it cannot do much until you grant them.',
       kw: 'notch dynamic island menu bar macbook media controls'
     },
     {
@@ -1270,10 +1270,10 @@ h1 .grad {
     },
     {
       os: 'mac', name: 'Mac Mouse Fix', tag: 'Make any mouse feel right', icon: '🖱️', color: '#35e0d0',
-      preview: 'pointer', tags: ['Free tier', 'Input'],
+      preview: 'pointer', tags: ['Trial, then $2.99', 'Input'],
       desc: 'Gives a normal third-party mouse the smooth scrolling and gesture support macOS reserves for Apple hardware, and maps the extra buttons to Mission Control, spaces and back-forward.',
       dl: 'https://github.com/noah-nuebling/mac-mouse-fix/releases/latest', src: 'https://macmousefix.com/',
-      note: 'Free to use with an unlimited free trial of the paid features; a licence is a one-off, not a subscription.',
+      note: 'Free for 30 days, and the days only count down while you are actually using it. After that a licence is $2.99 once — no subscription.',
       kw: 'mouse scroll smooth buttons gestures logitech pointer remap'
     },
 
@@ -1386,7 +1386,8 @@ h1 .grad {
   function tagClass(label) {
     var l = label.toLowerCase();
     if (l.indexOf('open source') > -1) return 'tag oss';
-    if (l.indexOf('free tier') > -1 || l.indexOf('personal use') > -1) return 'tag paid';
+    if (l.indexOf('free tier') > -1 || l.indexOf('personal use') > -1 ||
+        l.indexOf('trial') > -1 || l.indexOf('$') > -1) return 'tag paid';
     if (l === 'free') return 'tag free';
     return 'tag';
   }

@@ -42,9 +42,21 @@ self.addEventListener('fetch', (e) => {
         return res;
       })
       .catch(() =>
-        caches.match(e.request).then((cached) =>
-          cached || caches.match('./').then((root) => root || caches.match('./index.html'))
-        )
+        caches.match(e.request).then((cached) => {
+          if (cached) return cached;
+          // Only the launcher's own URL falls back to the launcher shell. Any
+          // other page — optimize.html, a game, anything added later — has to
+          // fail honestly instead, because serving index.html here renders the
+          // launcher under someone else's URL. That is the same class of bug
+          // the v2 cache-name bump was introduced to fix, and it comes back
+          // for every new page unless the fallback is scoped.
+          const path = new URL(e.request.url).pathname;
+          const root = new URL('./', self.location).pathname;
+          if (path === root || path === root + 'index.html') {
+            return caches.match('./').then((r) => r || caches.match('./index.html'));
+          }
+          return Response.error();
+        })
       )
   );
 });
