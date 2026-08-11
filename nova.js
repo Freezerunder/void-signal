@@ -330,6 +330,16 @@
     return db[game];
   }
 
+  // Marks today's attempt as settled: no retry is possible or needed. The run
+  // already on record wins over the one just played, because replaying the
+  // daily does not replace the run that actually reached the board.
+  function settleDaily(game, score, meta, userId) {
+    var prior = dailyRecord(game);
+    if (prior && !prior.pending) return prior;
+    return recordDaily(game, prior ? prior.score : score, false,
+                       prior ? prior.meta : meta, userId);
+  }
+
   // Retries a daily run whose POST failed earlier. Deliberately scoped to the
   // account that recorded it: signing in on a shared machine must never post
   // somebody else's attempt under your name, and a run played signed-out was
@@ -374,8 +384,17 @@
     // local free-play list rather than double-counted there — but it is still
     // written down, under its own key, because a dropped connection must not
     // silently swallow the single run a player gets today.
-    if (daily) recordDaily(game, score, true, meta, user ? user.id : null);
-    else saveLocalScore(game, entry);
+    // Replaying today's daily must not reopen a settled record. Overwriting it
+    // as pending would tell the player they still have a ranked run left, and
+    // would later flush the replay score instead of the one on the board.
+    if (daily) {
+      var prior = dailyRecord(game);
+      if (!prior || prior.pending) {
+        recordDaily(game, score, true, meta, user ? user.id : null);
+      }
+    } else {
+      saveLocalScore(game, entry);
+    }
 
     if (!user) return Promise.resolve({ posted: false, reason: 'guest' });
 
@@ -388,7 +407,7 @@
         }
       });
     }).then(function () {
-      if (daily) recordDaily(game, score, false, meta, user.id);
+      if (daily) settleDaily(game, score, meta, user.id);
       return { posted: true };
     }).catch(function (err) {
       // 23505 is the one-daily-run-per-day unique index doing its job, which
@@ -396,7 +415,7 @@
       // so the local record is settled too — leaving it pending would offer a
       // retry that can never succeed.
       if (err.data && err.data.code === '23505') {
-        if (daily) recordDaily(game, score, false, meta, user.id);
+        if (daily) settleDaily(game, score, meta, user.id);
         return { posted: false, reason: 'already-played' };
       }
       return { posted: false, reason: String(err.message || err) };
