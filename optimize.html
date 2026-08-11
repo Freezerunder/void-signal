@@ -415,6 +415,12 @@ h1 .grad {
 .term-head { padding: 14px 16px 4px; }
 .term-head h3 { margin: 0 0 4px; font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 .term-head p { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.req-tag {
+  font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--accent-3); background: rgba(53,224,208,.1); border: 1px solid rgba(53,224,208,.28);
+  padding: 2px 7px; border-radius: 5px; margin-left: 7px; vertical-align: 2px;
+}
+.term-card[data-requires="1"] { border-left-style: dashed; }
 .term-code {
   position: relative;
   margin: 0 14px 14px; padding: 12px 46px 12px 14px;
@@ -618,7 +624,7 @@ h1 .grad {
     <section class="section" id="terminal">
       <div class="section-head">
         <h2><span class="os-badge">⌨️</span> Terminal &amp; PowerShell — no download</h2>
-        <p>Everything on this page so far is an app. These aren't — they're commands already built into macOS and Windows. Copy, paste into Terminal or PowerShell, read what it does before you hit return.</p>
+        <p>Everything on this page so far is an app. These aren't — they're commands already built into macOS and Windows, verified by actually running each one. Copy, paste into Terminal or PowerShell, read what it does before you hit return. Two cards are marked <span class="req-tag" style="margin-left:0">Needs Homebrew</span> / <span class="req-tag" style="margin-left:0">Needs winget</span> — those need one small thing installed first, both already in the app list above.</p>
       </div>
       <div class="term-tabs" id="termTabs">
         <button class="chip on" data-tos="all">Both</button>
@@ -2637,14 +2643,18 @@ h1 .grad {
     { os: 'win', title: 'Find what is keeping the PC awake', cmd: 'powercfg /energy',
       desc: 'Runs a 60-second diagnostic and writes energy-report.html listing exactly what is blocking sleep or wasting power.' },
     { os: 'win', title: 'See what is actually using the CPU', cmd: 'Get-Process | Sort-Object CPU -Descending | Select-Object -First 10 Name,CPU',
-      desc: 'A live, sortable answer to "what is my computer doing right now" with no third-party monitor needed.' }
+      desc: 'A live, sortable answer to "what is my computer doing right now" with no third-party monitor needed.' },
+    { os: 'mac', title: 'Update everything Homebrew installed', cmd: 'brew update && brew upgrade && brew cleanup',
+      requires: 'Homebrew', desc: 'Updates every Homebrew app and command-line tool in one go, then deletes the old versions it leaves behind.' },
+    { os: 'win', title: 'Update everything winget installed', cmd: 'winget upgrade --all',
+      requires: 'winget', desc: 'Updates every app winget knows about in one go — the closest thing Windows has to "update all".' }
   ];
 
   function termCard(t) {
     var lines = t.cmd.split('\n');
     return '' +
-      '<div class="term-card" data-tos="' + t.os + '">' +
-        '<div class="term-head"><h3>' + t.title + '</h3><p>' + t.desc + '</p></div>' +
+      '<div class="term-card" data-tos="' + t.os + '"' + (t.requires ? ' data-requires="1"' : '') + '>' +
+        '<div class="term-head"><h3>' + t.title + (t.requires ? '<span class="req-tag">Needs ' + t.requires + '</span>' : '') + '</h3><p>' + t.desc + '</p></div>' +
         '<div class="term-code">' + lines.map(function (l) { return escHTML(l); }).join('\n') +
           '<button class="term-copy" data-copy="' + encodeURIComponent(t.cmd) + '" aria-label="Copy command">' +
             '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"></rect><path d="M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1"></path></svg>' +
@@ -2713,8 +2723,6 @@ h1 .grad {
         cmd: 'sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder' },
       { id: 'diskcheck', label: 'Verify the boot disk', desc: 'Read-only — reports problems, changes nothing.', on: true,
         cmd: 'diskutil verifyVolume /' },
-      { id: 'periodic', label: 'Run the built-in maintenance scripts', desc: 'macOS already runs these on a schedule; this just runs them now.', on: true,
-        cmd: 'sudo periodic daily weekly monthly' },
       { id: 'dockfinder', label: 'Restart Dock and Finder', desc: 'Fixes a frozen Dock or an unresponsive Finder window.', on: true,
         cmd: 'killall Dock\nkillall Finder' },
       { id: 'space', label: 'Report the 20 largest items in Downloads', desc: 'Informational only — lists, does not delete.', on: true,
