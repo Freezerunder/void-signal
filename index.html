@@ -823,16 +823,17 @@
     plays[game.id] = { at: Date.now(), count: (prev.count || 0) + 1 };
     writeJSON(PLAYS_KEY, plays);
 
-    // In the desktop app the launcher *is* the app: navigating it away leaves
-    // the library nowhere to come back to. Games get their own window instead,
-    // the way a real launcher keeps its storefront open behind what it starts.
-    // In a browser, following the link is what a card should do — a popup
-    // would fight the tab bar and get blocked besides.
-    if (IS_DESKTOP) {
-      window.open(game.file, '_blank');
-      return;
-    }
-    window.location.href = game.file;
+    // The library stays put and the game opens alongside it: a new tab in a
+    // browser, its own window in the desktop app, which has no tabs to open.
+    // Losing the hub every time you started something was the whole
+    // complaint, so it is kept in both places rather than only in the app.
+    var opened = window.open(game.file, '_blank');
+
+    // A popup blocker can still refuse even a click-driven open. Rather than
+    // let the card do nothing at all, fall back to following the link.
+    // Deliberately no 'noopener': the game reads window.opener to decide
+    // whether its back link should close the tab or navigate.
+    if (!opened) window.location.href = game.file;
   }
 
   function buildGrid() {

@@ -1111,11 +1111,15 @@
     requestAnimationFrame(frame);
   }
 
-  // In the desktop app this game has its own window and the library is still
-  // open behind it, so "back to the library" means closing this window.
-  // Navigating would stack a second launcher on top of the first.
+  // Opened from the library, this page has its own tab or window with the
+  // library still sitting behind it, so "back to the library" means closing
+  // this one — navigating would stack a second hub on top of the first.
+  // window.opener is the test rather than a desktop check, because it is
+  // equally true of a browser tab and an Electron window, and it is false
+  // when the page was opened directly from a bookmark or a shared link,
+  // where there is nothing to close and the link should behave normally.
   const backlink = document.querySelector('.backlink');
-  if (backlink && window.Nova && window.Nova.isDesktop) {
+  if (backlink && window.opener) {
     backlink.addEventListener('click', function (e) {
       e.preventDefault();
       window.close();
