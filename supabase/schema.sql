@@ -70,14 +70,32 @@ create table if not exists public.scores (
   game       text not null,
   score      integer not null check (score > 0),
   meta       jsonb not null default '{}'::jsonb,
+  daily      boolean not null default false,
+  day        date,
   created_at timestamptz not null default now(),
   constraint game_shape check (game ~ '^[a-z0-9_-]{1,32}$')
 );
 
--- Matches the only query the client makes: top N for one game, ties to
--- whoever got there first.
+-- Existing installs: add the daily-challenge columns without touching data.
+alter table public.scores add column if not exists daily boolean not null default false;
+alter table public.scores add column if not exists day date;
+
+-- Matches the two queries the client makes: top N for one game all-time, and
+-- top N for one game on one day. Ties go to whoever got there first.
 create index if not exists scores_game_rank_idx
   on public.scores (game, score desc, created_at asc);
+
+create index if not exists scores_daily_rank_idx
+  on public.scores (game, day, score desc, created_at asc)
+  where daily;
+
+-- One daily run per player per game per day. This is what makes the daily a
+-- race rather than a grind: everyone gets the same board and one attempt at
+-- it. Free-play scores have day = null and are not covered by this index, so
+-- they stay unlimited.
+create unique index if not exists scores_one_daily_per_day
+  on public.scores (user_id, game, day)
+  where daily;
 
 alter table public.scores enable row level security;
 
@@ -94,9 +112,9 @@ create policy "you may post only your own scores"
 -- No update or delete policy: the board is append-only, so nobody can rewrite
 -- or quietly remove a run — including their own.
 
--- The display name on a score is stamped from the profile rather than taken
--- from the request, so a hand-rolled POST cannot post under someone else's
--- name.
+-- The display name and the challenge day are both stamped from trusted
+-- sources rather than taken from the request, so a hand-rolled POST can
+-- neither post under someone else's name nor pick its own day.
 create or replace function public.stamp_score_username()
 returns trigger
 language plpgsql
@@ -110,6 +128,20 @@ begin
 
   if new.username is null then
     new.username := 'Player';
+  end if;
+
+  -- The day is stamped here rather than taken from the request, so nobody can
+  -- backdate a run onto an easier board or post to tomorrow early. Free play
+  -- carries no day at all.
+  --
+  -- Explicitly UTC rather than current_date: current_date follows the database
+  -- session's TimeZone, while the client derives the day from getUTC* to pick
+  -- the board. If the two ever disagreed, a player would be shown one day's
+  -- board and have their run filed under another.
+  if new.daily then
+    new.day := (now() at time zone 'utc')::date;
+  else
+    new.day := null;
   end if;
 
   return new;

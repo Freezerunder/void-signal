@@ -159,6 +159,38 @@
   .score-row.won .score-rank::after { content: '★'; margin-left: 2px; color: #f0d000; }
   .score-empty { margin-top: 8px; font-size: 12px; color: #5a6478; }
 
+  .modes {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    margin-top: 8px;
+  }
+
+  .mode {
+    font: inherit;
+    font-size: 12px;
+    padding: 6px 0;
+    border-radius: 6px;
+    border: 1px solid var(--line);
+    background: var(--panel-2);
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .mode:hover { color: var(--text); }
+
+  .mode.on {
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  .mode-note {
+    margin-top: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #5a6478;
+  }
+
   #overlay {
     position: absolute;
     inset: 8px;
@@ -255,6 +287,15 @@
     <div class="card">
       <div class="label">Next</div>
       <canvas id="next"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="label">Mode</div>
+      <div class="modes">
+        <button class="mode on" id="modefree" type="button">Free play</button>
+        <button class="mode" id="modedaily" type="button">Daily</button>
+      </div>
+      <div class="mode-note" id="modenote"></div>
     </div>
 
     <div class="card">
@@ -360,6 +401,9 @@
     lines: document.getElementById('lines'),
     scores: document.getElementById('scores'),
     boardLabel: document.getElementById('boardlabel'),
+    modeFree: document.getElementById('modefree'),
+    modeDaily: document.getElementById('modedaily'),
+    modeNote: document.getElementById('modenote'),
     overlay: document.getElementById('overlay'),
     ovTitle: document.getElementById('ov-title'),
     ovSub: document.getElementById('ov-sub'),
@@ -370,6 +414,14 @@
 
   let board, current, nextType, bag;
   let score, lines, level, best = 0, won;
+
+  // 'free' draws pieces from Math.random; 'daily' draws them from a generator
+  // seeded on the date, so every player worldwide gets the identical sequence
+  // for that day. Every random draw in this file goes through `rand` — if a
+  // second source of randomness is ever added, it has to come through here
+  // too, or two players on the same daily would quietly diverge.
+  let mode = 'free';
+  let rand = Math.random;
   let state;                             // 'playing' | 'clearing' | 'paused' | 'over'
   let dropTimer, lockTimer, lockResets;
   let clearTimer, clearRows;
@@ -386,14 +438,14 @@
     if (!bag || bag.length === 0) {
       bag = CLASSIC.slice();
       for (let i = bag.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
+        const j = Math.floor(rand() * (i + 1));
         [bag[i], bag[j]] = [bag[j], bag[i]];
       }
       // Exactly one helper per bag, dropped in at a random position: help
       // arrives often enough to plan around without turning the board into
       // free real estate.
-      bag.splice(Math.floor(Math.random() * (bag.length + 1)), 0,
-                 HELPERS[Math.floor(Math.random() * HELPERS.length)]);
+      bag.splice(Math.floor(rand() * (bag.length + 1)), 0,
+                 HELPERS[Math.floor(rand() * HELPERS.length)]);
     }
     return bag.pop();
   }
@@ -409,6 +461,12 @@
   }
 
   function reset() {
+    // Re-seeded on every reset rather than once at boot, so restarting the
+    // daily deals that day's sequence again from the top. The board belongs
+    // to the day, not to the attempt.
+    rand = (mode === 'daily' && window.Nova && window.Nova.daily)
+      ? window.Nova.daily.rng(GAME_ID)
+      : Math.random;
     board = emptyBoard();
     bag = null;
     score = 0;
@@ -766,30 +824,93 @@
   }
 
   function refreshBoard(highlight) {
-    return window.Nova.topScores(GAME_ID, 10).then(function (res) {
+    const daily = mode === 'daily';
+    return window.Nova.topScores(GAME_ID, 10, daily).then(function (res) {
       boardIsGlobal = res.global;
-      el.boardLabel.textContent = res.global ? 'Leaderboard · World' : 'Leaderboard · This device';
+      // A daily board that could not be reached says so rather than falling
+      // back to this device's scores: the daily is the shared race or it is
+      // nothing, and local runs under a "Daily" heading would be a lie.
+      el.boardLabel.textContent = daily
+        ? (res.global ? 'Daily · World' : 'Daily · Offline')
+        : (res.global ? 'Leaderboard · World' : 'Leaderboard · This device');
       renderScores(res.rows, highlight);
       return res;
     });
   }
+
+  // ------------------------------------------------------------------ mode
+
+  function resetsIn() {
+    const ms = window.Nova.daily.msUntilReset();
+    const h = Math.floor(ms / 3600000);
+    const m = Math.floor((ms % 3600000) / 60000);
+    return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+  }
+
+  function updateModeNote() {
+    if (mode === 'free') {
+      el.modeNote.textContent = 'Random pieces. Play as many runs as you like.';
+      return;
+    }
+    const rec = window.Nova.daily.record(GAME_ID);
+    const parts = ['The same pieces, in the same order, for everyone today.'];
+    if (!window.Nova.user()) parts.push('Sign in to be ranked.');
+    else if (rec && !rec.pending) parts.push('Already played — this run will not be ranked.');
+    else parts.push('One ranked run.');
+    parts.push('Resets in ' + resetsIn() + '.');
+    el.modeNote.textContent = parts.join(' ');
+  }
+
+  function setMode(next) {
+    if (mode === next) return;
+    mode = next;
+    el.modeFree.classList.toggle('on', mode === 'free');
+    el.modeDaily.classList.toggle('on', mode === 'daily');
+    updateModeNote();
+    reset();
+    refreshBoard();
+  }
+
+  el.modeFree.addEventListener('click', function () { setMode('free'); });
+  el.modeDaily.addEventListener('click', function () { setMode('daily'); });
+
+  // Keeps the countdown honest without a per-frame cost, and rolls the note
+  // over to the new day's wording on its own if the tab is left open.
+  setInterval(function () { if (mode === 'daily') updateModeNote(); }, 30000);
 
   // Returns the 1-based place this run took on the board it landed on, or
   // null if it missed. Matching on name+score is enough here: the only way to
   // collide is the same player posting the identical score twice, which lands
   // on the same rank anyway.
   function postRun(meta) {
-    if (score <= 0) return Promise.resolve(null);
+    if (score <= 0) return Promise.resolve({ place: null, reason: null });
     var mine = { name: playerName(), score: score };
-    return window.Nova.submitScore(GAME_ID, score, meta)
-      .then(function () { return refreshBoard(mine); })
+    var reason = null;
+    return window.Nova.submitScore(GAME_ID, score, meta, mode === 'daily')
+      .then(function (res) {
+        reason = res.posted ? null : res.reason;
+        updateModeNote();               // a ranked daily run is now spent
+        return refreshBoard(mine);
+      })
       .then(function (res) {
         for (var i = 0; i < res.rows.length; i++) {
-          if (res.rows[i].score === mine.score && res.rows[i].name === mine.name) return i + 1;
+          if (res.rows[i].score === mine.score && res.rows[i].name === mine.name) {
+            return { place: i + 1, reason: reason };
+          }
         }
-        return null;
+        return { place: null, reason: reason };
       })
-      .catch(function () { return null; });
+      .catch(function () { return { place: null, reason: reason }; });
+  }
+
+  // Why a run did not make the board, when that is worth saying out loud. A
+  // missed placing is ordinary and needs no explanation; being unranked
+  // because you are signed out, or because today's attempt is already spent,
+  // is not obvious from the board alone.
+  function reasonText(reason) {
+    if (reason === 'guest') return '<br>Sign in to be ranked.';
+    if (reason === 'already-played') return '<br>Today\'s daily run is already on the board.';
+    return '';
   }
 
   function renderScores(rows, highlight) {
@@ -845,8 +966,10 @@
     best = Math.max(best, score);
     showOverlay(title, base, hint);
     const at = state;
-    postRun({ won: didWin, lines: lines, level: level }).then(function (place) {
-      if (place && state === at) el.ovSub.innerHTML = base + placeText(place);
+    postRun({ won: didWin, lines: lines, level: level }).then(function (out) {
+      if (state !== at) return;
+      const extra = placeText(out.place) + reasonText(out.reason);
+      if (extra) el.ovSub.innerHTML = base + extra;
     });
   }
 
@@ -989,6 +1112,7 @@
   }
 
   reset();
+  updateModeNote();
   refreshBoard();                        // fills the panel before the first run ends
   requestAnimationFrame(frame);
 })();
