@@ -31,7 +31,9 @@
     ],
     "mac": {
       "target": ["dmg"],
-      "category": "public.app-category.games"
+      "category": "public.app-category.games",
+      "identity": "-",
+      "hardenedRuntime": false
     },
     "win": {
       "target": ["nsis"]
