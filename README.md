@@ -51,7 +51,7 @@ The **Downloads** view offers the launcher itself two ways, on the Epic model �
 - **Web app** — installs this page as its own windowed app with its own icon, no installer and no signing warnings, and it keeps working offline after the first load. Chromium browsers get a real **Install** button (via `beforeinstallprompt`); Safari and the rest get the menu path for their browser, since there's no API to trigger it.
 - **Desktop app** — the Electron build in `electron/`, which bundles `index.html`, `voidsignal.html` and `tetris.html` together, so inside the app there is nothing left to download and the cards read **Installed** rather than "Play in browser". The launcher looks up the latest GitHub release at runtime and points the button at the right asset for the visitor's OS, reading the URL off the API response rather than assembling it — `productName` has a space in it, so electron-builder emits names like `Nova Games Setup 1.0.0.exe`. With no release published it says so plainly instead of linking to an empty page, and if GitHub can't be reached it falls back to the releases page. The answer is cached for the life of the page so switching views doesn't burn the unauthenticated rate limit.
 
-**Publishing a desktop build** (v1.0.0 and v1.1.0 are published):
+**Publishing a desktop build** (v1.0.0 through v1.3.0 are published):
 
 1. `.github/workflows/build-desktop.yml` has to exist **on the remote**. Pushing it needs the `workflow` OAuth scope, which the current token doesn't have — either `gh auth refresh -s workflow` or paste the file into GitHub's web editor.
 2. Run it once via **workflow_dispatch** first. It has never run, so expect to debug it from the Actions logs.
@@ -69,6 +69,8 @@ codesign --force --deep --sign - "/Applications/Nova Games.app"
 ```
 
 Removing the warning altogether means a Developer ID certificate and notarization in CI (Apple Developer Program, $99/yr).
+
+**Architecture.** `macos-latest` runners are Apple Silicon, so a mac build with no `arch` set only ever produces an arm64 dmg — v1.2.0 shipped that way, which left Intel Macs with nothing that would even open (Rosetta translates x64 *into* arm64 execution, not the other way around, so there is no way to run an arm64-only binary on Intel). `mac.arch: "universal"` builds one dmg with both slices instead, at the cost of a larger download.
 
 ---
 
