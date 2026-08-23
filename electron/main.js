@@ -19,7 +19,7 @@ const WINDOW_OPTIONS = {
 
 // The pages that ship inside the build. Anything else asking for a window is
 // the open web and belongs in the user's real browser.
-const BUNDLED_PAGES = ['index.html', 'voidsignal.html', 'tetris.html', '2048.html'];
+const BUNDLED_PAGES = ['index.html', 'voidsignal.html', 'tetris.html', '2048.html', 'sensfinder.html'];
 
 function isBundledPage(url) {
   if (!url.startsWith('file://')) return false;

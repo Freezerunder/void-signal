@@ -32,7 +32,7 @@ jobs:
         # is Copy-Item and rejects multiple positional sources.
         shell: bash
         run: |
-          cp ../index.html ../nova.js ../voidsignal.html ../tetris.html ../2048.html .
+          cp ../index.html ../nova.js ../voidsignal.html ../tetris.html ../2048.html ../sensfinder.html .
           cp -R ../icons .
       - run: npm install
       - run: npm run dist -- ${{ matrix.args }}

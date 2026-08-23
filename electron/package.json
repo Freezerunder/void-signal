@@ -27,6 +27,7 @@
       "voidsignal.html",
       "tetris.html",
       "2048.html",
+      "sensfinder.html",
       "icons/**/*"
     ],
     "mac": {

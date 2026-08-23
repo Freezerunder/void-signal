@@ -192,6 +192,18 @@
   }
   .warn b { color: var(--dread); }
 
+  .calbox {
+    margin-top: 12px; padding: 26px 16px; text-align: center;
+    border: 1.5px dashed var(--line); border-radius: 10px;
+    color: var(--dim); font-size: 11.5px; letter-spacing: .04em;
+    cursor: crosshair; user-select: none;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .calbox.active {
+    border-color: rgba(63,167,160,.6); color: var(--accent);
+    background: rgba(63,167,160,.07);
+  }
+
   ::selection { background: rgba(63,167,160,.35); }
 </style>
 </head>
@@ -319,6 +331,7 @@
         </div>
       </div>
 
+      <canvas id="fchart" style="width:100%; height:150px; display:block; margin-top:4px;"></canvas>
       <div class="ladder" id="ladder"></div>
       <div class="callout" id="fresult" hidden>
         <div class="big" id="fresult-cm">—</div>
@@ -377,6 +390,27 @@
   <!-- =============================================================== notes -->
   <section class="view" id="view-notes" hidden>
     <div class="card">
+      <h2>Calibrate (measures your real pixels-per-cm, skips the DPI guess)</h2>
+      <p>Everything above assumes 1 browser pixel ≈ 1 mouse count, which is only exactly true on Windows with default pointer settings. This measures what's actually happening on your machine instead of assuming it: set a distance, press and hold the box below, drag your mouse that far along a ruler or straight edge, then release.</p>
+      <div class="row">
+        <div class="ctl">
+          <label>Distance you'll move (cm)</label>
+          <input type="number" id="cal-dist" min="2" max="60" step="0.5" value="15">
+        </div>
+      </div>
+      <div class="calbox" id="cal-box">Press and hold, drag 15 cm along a ruler, then release</div>
+      <div class="statrow" id="cal-result" hidden>
+        <div class="stat"><div class="n" id="cal-effdpi">—</div><div class="l">Measured effective DPI</div></div>
+        <div class="stat"><div class="n" id="cal-delta">—</div><div class="l">vs. current DPI field</div></div>
+      </div>
+      <div class="row" id="cal-actions" hidden style="justify-content:center; margin-top:10px;">
+        <button class="bigbtn" id="cal-apply" style="padding:8px 18px; font-size:10px;">Apply to DPI field above</button>
+      </div>
+      <div class="warn" id="cal-accel-warn" hidden></div>
+      <p style="margin-top:12px; font-size:11px;">Try it twice — once slow, once at a fast flicking speed. If the two measurements disagree by more than a few percent, that's your OS or mouse software applying acceleration, and it's shown as a warning below rather than averaged away silently.</p>
+    </div>
+
+    <div class="card">
       <h2>How the measurement actually works</h2>
       <div class="noteitem"><div class="dot"></div><div>The trainer turns your view by <b>mouse pixels × DPI-derived degrees-per-count</b>, using the browser's <b>Pointer Lock API</b> for relative mouse movement instead of absolute cursor position. That's the same relative-delta approach games use, just without direct access to raw HID counts.</div></div>
       <div class="noteitem"><div class="dot"></div><div>1 browser "pixel" of movement is treated as ≈1 raw mouse count. That assumption holds well on <b>Windows</b> when pointer speed is left at the default <b>6/11</b> and "Enhance pointer precision" is <b>off</b> — the standard "raw input" setup most competitive players already use.</div></div>
@@ -387,7 +421,7 @@
       <h2>Known roadblocks (browser vs. native game)</h2>
       <div class="noteitem"><div class="dot"></div><div><b>No raw HID access.</b> Browsers can't read raw mouse-controller counts the way a game's raw input thread can — Pointer Lock gives OS-processed pixel deltas. Windows with default pointer curve settings tracks 1:1 closely; anything else introduces drift.</div></div>
       <div class="noteitem"><div class="dot"></div><div><b>macOS mouse acceleration can't be fully disabled from a webpage.</b> macOS applies its own cursor-speed curve system-wide, including in Safari/Chrome. Trackpads make this worse — they use an entirely different acceleration curve. For a closer 1:1 feel on Mac, third-party tools like <b>Mos</b>, <b>SteerMouse</b>, or <b>LinearMouse</b> can flatten the curve; the browser itself has no setting for this.</div></div>
-      <div class="noteitem"><div class="dot"></div><div><b>DPI can't be read from the OS or mouse.</b> There's no browser API for it — it has to be typed in from your mouse's software/manual. A wrong DPI value throws off every cm/360 and converter number on this page.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>DPI can't be read from the OS or mouse.</b> There's no browser API for it — normally it has to be typed in from your mouse's software/manual, and a wrong value throws off every cm/360 and converter number on this page. The <b>Calibrate</b> tool above sidesteps this by measuring your real pixels-per-cm directly instead of trusting a looked-up DPI number.</div></div>
       <div class="noteitem"><div class="dot"></div><div><b>Pointer Lock support varies.</b> Chrome, Firefox and Edge support it fully; Safari on macOS supports it but has historically been less consistent about it; there's no equivalent on iOS/iPadOS/Android since there's no relative-motion mouse input there at all — this tool is desktop-mouse only.</div></div>
       <div class="noteitem"><div class="dot"></div><div><b>Very fast flicks can outrun a single animation frame.</b> The page samples <span class="mono">getCoalescedEvents()</span> where the browser exposes it (Chromium) to recover sub-frame mouse samples instead of only the last one per frame; Firefox/Safari don't expose that API, so very fast flicks there are averaged per-frame instead, which is slightly less precise.</div></div>
       <div class="noteitem"><div class="dot"></div><div><b>Yaw constants can drift.</b> They're the community-verified defaults for each engine at the time this was built (Aug 2026) — a developer changing the default sensitivity scaling in an update would make that one row stale until updated here.</div></div>
@@ -533,6 +567,30 @@
     return { x: a.x / l, y: a.y / l, z: a.z / l };
   }
 
+  // ============================================================== fx colors
+  var TEAL = { r: 63, g: 167, b: 160 };
+  var GOLD = { r: 216, g: 178, b: 63 };
+  var DREAD = { r: 194, g: 69, b: 63 };
+  function rgba(c, a) { return 'rgba(' + c.r + ',' + c.g + ',' + c.b + ',' + a + ')'; }
+  function lerpColor(a, b, t) {
+    return { r: Math.round(a.r + (b.r - a.r) * t), g: Math.round(a.g + (b.g - a.g) * t), b: Math.round(a.b + (b.b - a.b) * t) };
+  }
+  // Streak escalates the target color from accent teal toward gold, so a hot
+  // run of hits *looks* hot instead of only a number changing in the HUD.
+  function streakColor(streak) { return lerpColor(TEAL, GOLD, clamp(streak / 14, 0, 1)); }
+  function easeOutBack(x) {
+    var c1 = 1.70158, c3 = c1 + 1;
+    return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+  }
+
+  // ============================================================ arena scene
+  // A ground grid + a ring of pylons around the player, both drawn with the
+  // same projection as everything else. Without them the stage is just
+  // floating dots on a starfield with no sense of scale or depth — this is
+  // what actually makes flicks read as 3D instead of a flat 2D dartboard.
+  var EYE_H = 1.6, GRID_HALF = 32, GRID_STEP = 4, GRID_SEG = 2;
+  var WALL_R = 30, WALL_H = 12, PYLON_COUNT = 24;
+
   // ========================================================= trainer engine
   // Shared by the free-play Flick Trainer and the scripted Auto Finder — both
   // just drive the same camera/spawn/projection core with different rules
@@ -549,6 +607,15 @@
       raf: 0,
       movBuf: { x: 0, y: 0 },
       stars: [],
+      particles: [],
+      deadTargets: [],
+      streak: 0,
+      shakeAmt: 0,
+      hitFlashAt: -9999,
+      missFlashAt: -9999,
+      fireAt: -9999,
+      gunSway: { x: 0, y: 0 },
+      lastYaw: 0, lastPitch: 0,
       running: false,
       rng: Math.random,
       onHit: null, onMiss: null, onSpawn: null,
@@ -556,12 +623,12 @@
       radiusDeg: 1.7
     };
 
+    // Direction vectors are cached at creation — stars never move, so
+    // re-deriving sin/cos of the same yaw/pitch 90 times every frame is
+    // wasted trig for a purely decorative layer.
     for (var i = 0; i < 90; i++) {
-      eng.stars.push({
-        yaw: eng.rng() * 360,
-        pitch: (eng.rng() * 160) - 80,
-        r: 0.6 + eng.rng() * 1.1
-      });
+      var syaw = eng.rng() * 360, spitch = (eng.rng() * 160) - 80;
+      eng.stars.push({ dir: dirFromAngles(syaw, spitch), r: 0.6 + eng.rng() * 1.1 });
     }
 
     function resize() {
@@ -590,6 +657,93 @@
       return { x: cx + (vx / vz) * focal, y: cy - (vy / vz) * focal, vz: vz };
     }
 
+    // A ground-plane point, projected the same way as any direction: the
+    // camera never translates, so "world position minus eye" is just another
+    // direction vector — project() doesn't need to know the difference.
+    function projectWorld(wx, wy, wz, basis, focal, cx, cy) {
+      return project({ x: wx, y: wy - EYE_H, z: wz }, basis, focal, cx, cy);
+    }
+
+    function drawGroundGrid(basis, focal, cx, cy) {
+      ctx.lineWidth = 1;
+      for (var fixedIsX = 0; fixedIsX < 2; fixedIsX++) {
+        for (var v = -GRID_HALF; v <= GRID_HALF; v += GRID_STEP) {
+          var fade = clamp(1 - Math.abs(v) / GRID_HALF, 0, 1);
+          if (fade < 0.03) continue;
+          ctx.strokeStyle = rgba(TEAL, fade * 0.3);
+          ctx.beginPath();
+          var open = false;
+          for (var t = -GRID_HALF; t <= GRID_HALF; t += GRID_SEG) {
+            var wx = fixedIsX ? v : t, wz = fixedIsX ? t : v;
+            var p = projectWorld(wx, 0, wz, basis, focal, cx, cy);
+            if (!p) { open = false; continue; }
+            if (!open) { ctx.moveTo(p.x, p.y); open = true; } else { ctx.lineTo(p.x, p.y); }
+          }
+          ctx.stroke();
+        }
+      }
+    }
+
+    function drawArenaWalls(basis, focal, cx, cy) {
+      ctx.strokeStyle = rgba(TEAL, 0.16);
+      ctx.lineWidth = 1;
+      var tops = [];
+      for (var i = 0; i <= PYLON_COUNT; i++) {
+        var a = (i / PYLON_COUNT) * TAU;
+        var px = WALL_R * Math.sin(a), pz = WALL_R * Math.cos(a);
+        var base = projectWorld(px, 0, pz, basis, focal, cx, cy);
+        var top = projectWorld(px, WALL_H, pz, basis, focal, cx, cy);
+        tops.push(top);
+        if (i < PYLON_COUNT && base && top) {
+          ctx.beginPath(); ctx.moveTo(base.x, base.y); ctx.lineTo(top.x, top.y); ctx.stroke();
+        }
+      }
+      ctx.beginPath();
+      var open = false;
+      for (var j = 0; j < tops.length; j++) {
+        var p = tops[j];
+        if (!p) { open = false; continue; }
+        if (!open) { ctx.moveTo(p.x, p.y); open = true; } else { ctx.lineTo(p.x, p.y); }
+      }
+      ctx.stroke();
+    }
+
+    // Hit-burst particles live in yaw/pitch space and fly outward at a fixed
+    // angular speed, so they project through the exact same camera pipeline
+    // as the target they came from instead of being screen-space confetti
+    // that ignores where the camera is looking.
+    function spawnBurst(yaw, pitch, color, now) {
+      var n = 14;
+      for (var i = 0; i < n; i++) {
+        var a = (i / n) * TAU + eng.rng() * 0.4;
+        var speed = 55 + eng.rng() * 90;
+        eng.particles.push({
+          yaw: yaw, pitch: pitch,
+          vyaw: Math.cos(a) * speed, vpitch: Math.sin(a) * speed * 0.7,
+          born: now, life: 360 + eng.rng() * 180,
+          color: color, size: 2 + eng.rng() * 2.5
+        });
+      }
+    }
+
+    function drawSphere(pr, radPx, color, glowAlpha) {
+      var g = ctx.createRadialGradient(pr.x - radPx * 0.35, pr.y - radPx * 0.35, Math.max(0.5, radPx * 0.05), pr.x, pr.y, radPx * 1.05);
+      g.addColorStop(0, rgba({ r: Math.min(255, color.r + 90), g: Math.min(255, color.g + 90), b: Math.min(255, color.b + 90) }, 1));
+      g.addColorStop(0.45, rgba(color, 1));
+      g.addColorStop(1, rgba({ r: color.r * 0.4, g: color.g * 0.4, b: color.b * 0.4 }, 1));
+      ctx.beginPath(); ctx.arc(pr.x, pr.y, radPx, 0, TAU);
+      ctx.fillStyle = g; ctx.fill();
+      ctx.lineWidth = Math.max(1.2, radPx * 0.1);
+      ctx.strokeStyle = rgba(color, 0.9);
+      ctx.stroke();
+      if (glowAlpha > 0) {
+        ctx.beginPath(); ctx.arc(pr.x, pr.y, radPx * 1.3, 0, TAU);
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = rgba(color, glowAlpha);
+        ctx.stroke();
+      }
+    }
+
     function newTarget() {
       var spread = eng.spawnMinDeg + eng.rng() * (eng.spawnMaxDeg - eng.spawnMinDeg);
       var ang = eng.rng() * TAU;
@@ -605,8 +759,8 @@
     }
     eng.newTarget = newTarget;
 
-    function angularDistDeg(dir) {
-      var f = dirFromAngles(eng.camYaw, eng.camPitch);
+    function angularDistDeg(dir, forward) {
+      var f = forward || dirFromAngles(eng.camYaw, eng.camPitch);
       return Math.acos(clamp(dot3(f, dir), -1, 1)) * R2D;
     }
 
@@ -636,14 +790,24 @@
       var t = eng.target;
       var dir = dirFromAngles(t.yaw, t.pitch);
       var dist = angularDistDeg(dir);
-      var ms = performance.now() - t.spawnAt;
+      var now = performance.now();
+      eng.fireAt = now;
+      var ms = now - t.spawnAt;
       if (dist <= t.radiusDeg) {
-        hitSound();
         var overshoot = !!t.overshootFlag;
+        var color = overshoot ? DREAD : streakColor(eng.streak);
+        hitSound();
+        eng.deadTargets.push({ yaw: t.yaw, pitch: t.pitch, radiusDeg: t.radiusDeg, at: now, color: color });
+        spawnBurst(t.yaw, t.pitch, color, now);
+        eng.hitFlashAt = now;
+        eng.shakeAmt = 3.5;
+        eng.streak++;
         eng.target = null;
         if (eng.onHit) eng.onHit({ ms: ms, overshoot: overshoot });
       } else {
         missSound();
+        eng.missFlashAt = now;
+        eng.streak = 0;
         if (eng.onMiss) eng.onMiss();
       }
     }
@@ -652,51 +816,108 @@
       if (!eng.running) return;
       eng.raf = requestAnimationFrame(frame);
 
+      var now = performance.now();
       var basis = camBasis();
       var focal = (eng.w / 2) / Math.tan((eng.fovDeg / 2) * D2R);
       var cx = eng.w / 2, cy = eng.h / 2;
 
+      // Camera shake decays each frame rather than running off a timer, so it
+      // always eases out smoothly regardless of frame rate.
+      eng.shakeAmt *= 0.82;
+      if (eng.shakeAmt < 0.05) eng.shakeAmt = 0;
+      var sx = eng.shakeAmt ? (eng.rng() - 0.5) * eng.shakeAmt * 2 : 0;
+      var sy = eng.shakeAmt ? (eng.rng() - 0.5) * eng.shakeAmt * 2 : 0;
+
+      // Gun sway: the viewmodel lags a beat behind the crosshair, springing
+      // back toward center — an inertia cue real weapon models use so the
+      // gun doesn't feel welded to the reticle.
+      var yawDelta = ((eng.camYaw - eng.lastYaw + 540) % 360) - 180;
+      var pitchDelta = eng.camPitch - eng.lastPitch;
+      eng.lastYaw = eng.camYaw; eng.lastPitch = eng.camPitch;
+      var swayTargetX = clamp(-yawDelta * 2.2, -16, 16);
+      var swayTargetY = clamp(pitchDelta * 2.2, -12, 12);
+      eng.gunSway.x += (swayTargetX - eng.gunSway.x) * 0.18;
+      eng.gunSway.y += (swayTargetY - eng.gunSway.y) * 0.18;
+
       ctx.clearRect(0, 0, eng.w, eng.h);
-      // backdrop
       var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(eng.w, eng.h) * 0.7);
       grad.addColorStop(0, '#0b0f14'); grad.addColorStop(1, '#05060a');
       ctx.fillStyle = grad; ctx.fillRect(0, 0, eng.w, eng.h);
+
+      // World-space content rides the shake offset; UI (crosshair, flashes,
+      // gun) is drawn after ctx.restore() so it stays pinned to the screen.
+      ctx.save();
+      ctx.translate(sx, sy);
+
+      drawGroundGrid(basis, focal, cx, cy);
+      drawArenaWalls(basis, focal, cx, cy);
 
       // stars (depth cue, purely decorative)
       ctx.fillStyle = 'rgba(150,190,200,0.5)';
       for (var i = 0; i < eng.stars.length; i++) {
         var s = eng.stars[i];
-        var p = project(dirFromAngles(s.yaw, s.pitch), basis, focal, cx, cy);
+        var p = project(s.dir, basis, focal, cx, cy);
         if (!p || p.x < -20 || p.x > eng.w + 20 || p.y < -20 || p.y > eng.h + 20) continue;
         var rr = s.r / p.vz;
         ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.4, rr), 0, TAU); ctx.fill();
       }
 
-      // target
+      // dying targets: brief pop-and-fade left behind by a hit
+      for (var d = eng.deadTargets.length - 1; d >= 0; d--) {
+        var dt = eng.deadTargets[d];
+        var dage = now - dt.at;
+        if (dage > 220) { eng.deadTargets.splice(d, 1); continue; }
+        var dp = project(dirFromAngles(dt.yaw, dt.pitch), basis, focal, cx, cy);
+        if (dp) {
+          var dtt = dage / 220;
+          var drad = Math.max(2, (dt.radiusDeg * D2R * focal) / dp.vz) * (1 + dtt * 0.7);
+          ctx.globalAlpha = clamp(1 - dtt, 0, 1);
+          drawSphere(dp, drad, dt.color, 0);
+          ctx.globalAlpha = 1;
+        }
+      }
+
+      // live target: spawns in with a small overshoot bounce, shaded like a
+      // lit sphere rather than a flat tinted disc, color escalating with streak
       if (eng.target) {
         var t = eng.target;
         var dir = dirFromAngles(t.yaw, t.pitch);
-        var dist = angularDistDeg(dir);
+        var dist = angularDistDeg(dir, basis.forward);
         if (dist < t.radiusDeg * 0.6) t.insideCore = true;
         else if (t.insideCore && dist > t.radiusDeg) t.overshootFlag = true;
 
         var pr = project(dir, basis, focal, cx, cy);
         if (pr) {
-          var rad = Math.max(3, (t.radiusDeg * D2R * focal) / pr.vz);
-          var age = performance.now() - t.spawnAt;
-          var pulse = 1 + 0.06 * Math.sin(age / 130);
-          ctx.beginPath();
-          ctx.arc(pr.x, pr.y, rad * pulse, 0, TAU);
-          ctx.fillStyle = t.overshootFlag ? 'rgba(194,69,63,0.28)' : 'rgba(63,167,160,0.28)';
-          ctx.fill();
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = t.overshootFlag ? '#c2453f' : '#3fa7a0';
-          ctx.stroke();
-          ctx.beginPath(); ctx.arc(pr.x, pr.y, rad * 0.28, 0, TAU);
-          ctx.fillStyle = '#eafffc';
-          ctx.fill();
+          var age = now - t.spawnAt;
+          var growT = clamp(age / 140, 0, 1);
+          var scale = growT < 1 ? Math.max(0, easeOutBack(growT)) : 1;
+          var rad = Math.max(3, (t.radiusDeg * D2R * focal) / pr.vz) * scale;
+          var pulse = 1 + 0.05 * Math.sin(age / 140);
+          var color = t.overshootFlag ? DREAD : streakColor(eng.streak);
+          drawSphere(pr, rad * pulse, color, 0.3 + 0.15 * Math.sin(age / 200));
         }
       }
+
+      // hit particles — fly outward in yaw/pitch space so they track the
+      // camera exactly like the target they came from
+      for (var pi = eng.particles.length - 1; pi >= 0; pi--) {
+        var pt = eng.particles[pi];
+        var page = now - pt.born;
+        if (page > pt.life) { eng.particles.splice(pi, 1); continue; }
+        var ptt = page / pt.life;
+        var pyaw = pt.yaw + pt.vyaw * (page / 1000);
+        var ppitch = pt.pitch + pt.vpitch * (page / 1000);
+        var pp = project(dirFromAngles(pyaw, ppitch), basis, focal, cx, cy);
+        if (!pp) continue;
+        var psize = Math.max(0.5, (pt.size * (1 - ptt * 0.6)) / Math.max(pp.vz, 0.3));
+        ctx.beginPath(); ctx.arc(pp.x, pp.y, psize, 0, TAU);
+        ctx.fillStyle = rgba(pt.color, (1 - ptt) * 0.9);
+        ctx.fill();
+      }
+
+      ctx.restore();
+
+      drawGun(now, cx, cy, eng.w, eng.h);
 
       // crosshair
       ctx.strokeStyle = 'rgba(232,236,242,0.85)';
@@ -708,7 +929,86 @@
       ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 9);
       ctx.stroke();
 
+      // hitmarker — a quick white X flashed over the crosshair on a hit
+      var hAge = now - eng.hitFlashAt;
+      if (hAge < 140) {
+        var ha = 1 - hAge / 140;
+        var hs = 7 + hAge * 0.05;
+        ctx.strokeStyle = 'rgba(255,255,255,' + ha + ')';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(cx - hs, cy - hs); ctx.lineTo(cx - hs * 0.4, cy - hs * 0.4);
+        ctx.moveTo(cx + hs, cy - hs); ctx.lineTo(cx + hs * 0.4, cy - hs * 0.4);
+        ctx.moveTo(cx - hs, cy + hs); ctx.lineTo(cx - hs * 0.4, cy + hs * 0.4);
+        ctx.moveTo(cx + hs, cy + hs); ctx.lineTo(cx + hs * 0.4, cy + hs * 0.4);
+        ctx.stroke();
+      }
+      if (hAge < 90) {
+        ctx.fillStyle = 'rgba(255,255,255,' + ((1 - hAge / 90) * 0.08) + ')';
+        ctx.fillRect(0, 0, eng.w, eng.h);
+      }
+
+      var mAge = now - eng.missFlashAt;
+      if (mAge < 220) {
+        var ma = (1 - mAge / 220) * 0.32;
+        var vg = ctx.createRadialGradient(cx, cy, Math.min(eng.w, eng.h) * 0.22, cx, cy, Math.max(eng.w, eng.h) * 0.72);
+        vg.addColorStop(0, 'rgba(194,69,63,0)'); vg.addColorStop(1, 'rgba(194,69,63,' + ma + ')');
+        ctx.fillStyle = vg; ctx.fillRect(0, 0, eng.w, eng.h);
+      }
+
       if (eng.onFrame) eng.onFrame();
+    }
+
+    // A simple low-poly rifle silhouette anchored bottom-right, purely for
+    // atmosphere — it doesn't participate in hit detection (the crosshair
+    // does that). Sway and recoil come from eng.gunSway / eng.fireAt, set in
+    // frame() and onClick() respectively.
+    function drawGun(now, cx, cy, w, h) {
+      var scale = clamp(w / 900, 0.55, 1.25);
+      var fireAge = now - eng.fireAt;
+      var kick = fireAge < 120 ? (1 - fireAge / 120) : 0;
+      var gx = w * 0.83 + eng.gunSway.x;
+      var gy = h * 1.02 + eng.gunSway.y + kick * 10;
+
+      ctx.save();
+      ctx.translate(gx, gy);
+      ctx.rotate(-kick * 0.1);
+      ctx.scale(scale, scale);
+      ctx.translate(0, -kick * 6);
+
+      var body = 'rgba(20,24,30,0.94)', rim = rgba(TEAL, 0.55);
+      ctx.lineJoin = 'round';
+
+      function shape(pts, fill, stroke) {
+        ctx.beginPath();
+        ctx.moveTo(pts[0][0], pts[0][1]);
+        for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+        ctx.closePath();
+        if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+        if (stroke) { ctx.lineWidth = 1.2; ctx.strokeStyle = stroke; ctx.stroke(); }
+      }
+
+      // stock
+      shape([[26, -18], [95, -14], [98, 6], [26, 8]], body, rim);
+      // magazine
+      shape([[-18, 10], [-2, 12], [-10, 58], [-26, 54]], body, rim);
+      // grip
+      shape([[6, 8], [30, 10], [34, 52], [12, 56]], body, rim);
+      // receiver / body
+      shape([[-62, -44], [32, -48], [34, 8], [-60, 10]], body, rim);
+      // scope
+      shape([[-48, -60], [-6, -62], [-6, -46], [-48, -46]], 'rgba(12,14,18,0.95)', rim);
+      // barrel
+      shape([[-172, -36], [-40, -40], [-40, -20], [-172, -22]], body, rim);
+      // muzzle glow on fire
+      if (kick > 0.05) {
+        ctx.beginPath();
+        ctx.arc(-172, -29, 6 + kick * 10, 0, TAU);
+        ctx.fillStyle = rgba(GOLD, kick * 0.7);
+        ctx.fill();
+      }
+
+      ctx.restore();
     }
 
     function start() {
@@ -843,6 +1143,61 @@
         '<div class="n dim">' + step.times.length + '/' + fRun.targetsPerStep + '</div>';
       box.appendChild(row);
     });
+
+    renderChart();
+  }
+
+  // The U-shaped curve — too twitchy on the left, too slow on the right,
+  // fastest in the middle — is the actual insight of the ladder test. A row
+  // of numbers doesn't show that shape; a plotted chart does at a glance.
+  function renderChart() {
+    var canvas = $('fchart'), cctx = canvas.getContext('2d');
+    var rect = canvas.getBoundingClientRect();
+    var dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+    canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+    cctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    var w = rect.width, h = rect.height;
+    cctx.clearRect(0, 0, w, h);
+    if (!fRun) return;
+
+    var scored = fRun.steps.map(fmtScore);
+    var bestIdx = -1, bestScore = Infinity;
+    scored.forEach(function (s, i) { if (s && s.score < bestScore) { bestScore = s.score; bestIdx = i; } });
+    var maxAvg = 1;
+    scored.forEach(function (s) { if (s) maxAvg = Math.max(maxAvg, s.avg); });
+
+    var n = fRun.steps.length, padL = 6, padR = 6, padT = 14, padB = 20;
+    var plotW = w - padL - padR, plotH = h - padT - padB;
+    var gap = plotW / n, bw = gap * 0.58;
+
+    for (var i = 0; i < n; i++) {
+      var s = scored[i];
+      var x = padL + gap * i + (gap - bw) / 2;
+      var barH = s ? Math.max(2, (s.avg / maxAvg) * plotH) : 2;
+      var y = padT + (plotH - barH);
+      var isBest = i === bestIdx && fRun.done;
+      var isActive = i === fRun.stepIdx && fRun.active;
+      cctx.fillStyle = isBest ? rgba(GOLD, 0.85) : rgba(TEAL, isActive ? 0.9 : (s ? 0.45 : 0.15));
+      cctx.fillRect(x, y, bw, barH);
+
+      if (s && s.overRate > 0) {
+        var oh = Math.max(2, s.overRate * 16);
+        cctx.fillStyle = rgba(DREAD, Math.min(0.9, 0.3 + s.overRate));
+        cctx.fillRect(x, Math.max(padT, y - oh - 3), bw, oh);
+      }
+
+      cctx.fillStyle = 'rgba(121,128,143,0.9)';
+      cctx.font = '9px ui-monospace, Menlo, Consolas, monospace';
+      cctx.textAlign = 'center';
+      cctx.fillText(fRun.steps[i].cm.toFixed(0), x + bw / 2, h - 6);
+
+      if (isBest) {
+        cctx.fillStyle = rgba(GOLD, 1);
+        cctx.font = '10px ui-sans-serif, sans-serif';
+        cctx.fillText('best', x + bw / 2, y - (s && s.overRate > 0 ? 20 : 4));
+      }
+    }
   }
 
   function startFinderRun() {
@@ -860,9 +1215,21 @@
     $('fresult').hidden = true;
     $('fresult-actions').hidden = true;
     renderLadder();
-    requestLock(fcv);
+    // If the stage is already locked from a previous run, requestPointerLock()
+    // is a no-op and pointerlockchange never fires — nothing would kick off
+    // the new run. Start it directly in that case instead of waiting for an
+    // event that isn't coming.
+    if (document.pointerLockElement === fcv) {
+      finder.start();
+      beginStep();
+    } else {
+      requestLock(fcv);
+    }
   }
   $('f-start').addEventListener('click', startFinderRun);
+  fstageEl.addEventListener('click', function () {
+    if (document.pointerLockElement !== fcv) requestLock(fcv);
+  });
 
   function beginStep() {
     if (!fRun) return;
@@ -951,6 +1318,9 @@
     { name: 'Destiny 2', yaw: 0.0066 },
     { name: 'Rainbow Six Siege', yaw: 0.00572958 },
     { name: 'Fortnite', yaw: 0.005555 },
+    { name: 'PUBG: Battlegrounds', yaw: 0.022 },
+    { name: 'Battlefield 2042', yaw: 0.0022 },
+    { name: 'Escape from Tarkov', yaw: 0.022 },
     { name: 'Rust', yaw: 0.11247 },
     { name: 'Roblox', yaw: 0.39783 }
   ];
@@ -989,6 +1359,77 @@
     });
   }
   renderConvertTable();
+
+  // =========================================================== calibration
+  // A drag-captured measurement of real browser pixels per physical cm,
+  // curve included — sidesteps the DPI lookup and the "1px ≈ 1 count"
+  // assumption entirely. No Pointer Lock needed: movementX/Y is reported on
+  // ordinary mousemove events too, so this works even where Pointer Lock
+  // itself is unavailable. Running it twice at different speeds is what
+  // turns this from "a slightly better DPI field" into an actual
+  // acceleration detector — two honestly-different measurements are more
+  // useful than one number pretending to be exact.
+  (function () {
+    var box = $('cal-box'), distInput = $('cal-dist');
+    var dragging = false, sumPx = 0, startedAt = 0;
+    var calRuns = [];
+
+    function onMove(e) { if (dragging) sumPx += Math.sqrt(e.movementX * e.movementX + e.movementY * e.movementY); }
+
+    function onUp() {
+      if (!dragging) return;
+      dragging = false;
+      box.classList.remove('active');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      finishCalibration();
+    }
+
+    box.addEventListener('mousedown', function (e) {
+      e.preventDefault();
+      dragging = true; sumPx = 0; startedAt = performance.now();
+      box.classList.add('active');
+      box.textContent = 'Dragging… release once you’ve moved ' + distInput.value + ' cm';
+      document.addEventListener('mousemove', onMove);
+      document.addEventListener('mouseup', onUp);
+    });
+
+    function finishCalibration() {
+      var dist = parseFloat(distInput.value);
+      var elapsedMs = performance.now() - startedAt;
+      box.textContent = 'Press and hold, drag ' + distInput.value + ' cm along a ruler, then release';
+      if (!dist || dist <= 0 || sumPx < 5) return;
+
+      var pxPerCm = sumPx / dist;
+      var effDpi = pxPerCm * 2.54;
+      calRuns.unshift({ effDpi: effDpi, speedPxPerMs: sumPx / Math.max(1, elapsedMs) });
+      calRuns = calRuns.slice(0, 2);
+
+      $('cal-result').hidden = false;
+      $('cal-actions').hidden = false;
+      $('cal-effdpi').textContent = Math.round(effDpi);
+      var delta = ((effDpi - state.dpi) / state.dpi) * 100;
+      $('cal-delta').textContent = (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%';
+
+      $('cal-apply').onclick = function () {
+        $('g-dpi').value = Math.round(effDpi);
+        $('g-dpi').dispatchEvent(new Event('input'));
+      };
+
+      var warn = $('cal-accel-warn');
+      if (calRuns.length === 2) {
+        var a = calRuns[0].effDpi, b = calRuns[1].effDpi;
+        var diffPct = Math.abs(a - b) / Math.min(a, b) * 100;
+        var speedDiffPct = Math.abs(calRuns[0].speedPxPerMs - calRuns[1].speedPxPerMs) / Math.min(calRuns[0].speedPxPerMs, calRuns[1].speedPxPerMs) * 100;
+        if (diffPct > 8 && speedDiffPct > 15) {
+          warn.hidden = false;
+          warn.innerHTML = '<b>Acceleration detected:</b> your last two drags (at noticeably different speeds) measured ' + Math.round(diffPct) + '% apart in effective DPI. That means your OS or mouse software is applying a speed-dependent curve — a single cm/360 number will always be an approximation here. For the steadiest reading, calibrate at roughly the speed you actually flick at.';
+        } else {
+          warn.hidden = true;
+        }
+      }
+    }
+  })();
 
   // Opened from the library, this page has its own tab/window with the
   // library behind it — closing beats stacking a second hub on top of it.
