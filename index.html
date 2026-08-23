@@ -368,6 +368,31 @@
     filter: drop-shadow(0 0 14px rgba(78,161,255,.35));
   }
 
+  .art-sens {
+    background:
+      linear-gradient(135deg, rgba(63,167,160,.18), transparent 55%),
+      radial-gradient(ellipse 90% 70% at 50% 115%, rgba(63,167,160,.2), transparent 62%),
+      linear-gradient(180deg, #0a0f13, #06070a);
+  }
+  .art-sens::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 70px; height: 70px; border-radius: 50%;
+    border: 2px solid rgba(63,167,160,.75);
+    box-shadow: 0 0 0 1px rgba(63,167,160,.2), 0 0 22px rgba(63,167,160,.3);
+  }
+  .art-sens::before {
+    content: ''; position: absolute; left: 50%; top: 50%; z-index: 1;
+    transform: translate(-50%, -50%);
+    width: 70px; height: 70px;
+    background:
+      linear-gradient(rgba(216,178,63,.9), rgba(216,178,63,.9)) 50% 4px / 2px 18px no-repeat,
+      linear-gradient(rgba(216,178,63,.9), rgba(216,178,63,.9)) 50% 48px / 2px 18px no-repeat,
+      linear-gradient(rgba(216,178,63,.9), rgba(216,178,63,.9)) 4px 50% / 18px 2px no-repeat,
+      linear-gradient(rgba(216,178,63,.9), rgba(216,178,63,.9)) 48px 50% / 18px 2px no-repeat;
+    filter: drop-shadow(0 0 8px rgba(216,178,63,.4));
+  }
+
   /* ------------------------------------------------------------- account */
 
   .acctgrid {
@@ -787,6 +812,10 @@
     {
       id: '2048', title: '2048', file: '2048.html',
       tag: 'Puzzle · Numbers', art: 'art-2048', daily: true
+    },
+    {
+      id: 'sensfinder', title: 'Sens Finder', file: 'sensfinder.html',
+      tag: 'Tool · Aim Training', art: 'art-sens'
     }
   ];
 

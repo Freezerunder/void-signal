@@ -1,0 +1,1006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sens Finder — Nova Games</title>
+<meta name="theme-color" content="#07080b">
+<style>
+  :root {
+    --bg: #07080b;
+    --panel: #0e1015;
+    --panel-2: #161a22;
+    --panel-3: #1c212b;
+    --line: #1e212a;
+    --text: #d8dbe2;
+    --muted: #79808f;
+    --dim: #4d5460;
+    --accent: #3fa7a0;
+    --dread: #c2453f;
+    --gold: #d8b23f;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+  button, select, input { font-family: inherit; }
+  button { cursor: pointer; }
+  button:disabled { cursor: default; }
+
+  /* Back to the launcher — same corner treatment as the other titles. */
+  .backlink {
+    position: fixed; top: 16px; left: 16px; z-index: 50;
+    color: var(--dim); text-decoration: none;
+    font-size: 10.5px; letter-spacing: .14em; text-transform: uppercase;
+    border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px;
+    background: rgba(20,24,34,.6);
+    transition: color .15s, border-color .15s;
+  }
+  .backlink:hover { color: var(--accent); border-color: var(--accent); }
+
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 62px 22px 60px; }
+
+  .brand {
+    text-align: center; font-size: 22px; letter-spacing: .3em; text-transform: uppercase;
+    color: #e8ecf2; margin-bottom: 6px;
+  }
+  .brand b { color: var(--accent); font-weight: 700; }
+  .tagline {
+    text-align: center; font-size: 11px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--dim); margin-bottom: 28px;
+  }
+
+  /* ------------------------------------------------------------- top bar */
+  .globals {
+    display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; justify-content: center;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px 18px; margin-bottom: 20px;
+  }
+  .gfield { display: flex; flex-direction: column; gap: 5px; min-width: 108px; }
+  .gfield label { font-size: 9px; letter-spacing: .16em; text-transform: uppercase; color: var(--dim); }
+  .gfield input {
+    background: #090b0f; color: var(--text);
+    border: 1px solid var(--line); border-radius: 7px;
+    padding: 8px 10px; font-size: 13px; outline: none;
+  }
+  .gfield input:focus { border-color: rgba(63,167,160,.55); }
+  .gfield .readout { font-size: 13px; color: var(--accent); padding: 8px 0; }
+
+  /* ------------------------------------------------------------------ tabs */
+  .tabs { display: flex; gap: 6px; justify-content: center; margin-bottom: 22px; flex-wrap: wrap; }
+  .tab {
+    padding: 9px 18px; background: transparent; color: var(--muted);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: 10.5px; letter-spacing: .16em; text-transform: uppercase;
+    transition: color .16s, border-color .16s, background .16s;
+  }
+  .tab:hover { color: var(--text); border-color: #2c313d; }
+  .tab.on { color: var(--accent); border-color: rgba(63,167,160,.5); background: rgba(63,167,160,.08); }
+
+  .view[hidden] { display: none; }
+
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 18px 20px; margin-bottom: 18px;
+  }
+  .card h2 {
+    margin: 0 0 12px; font-size: 12px; letter-spacing: .18em; text-transform: uppercase;
+    color: #e8ecf2; font-weight: 600;
+  }
+  .card p { font-size: 12px; line-height: 1.65; color: var(--muted); margin: 0 0 10px; }
+
+  /* --------------------------------------------------------------- trainer */
+  .stage {
+    position: relative; width: 100%; aspect-ratio: 16 / 9; max-height: 62vh;
+    background: #05060a; border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; margin-bottom: 14px;
+  }
+  .stage canvas { display: block; width: 100%; height: 100%; }
+  .stage-overlay {
+    position: absolute; inset: 0; z-index: 5;
+    display: grid; place-items: center; text-align: center;
+    background: rgba(6,7,10,.82); backdrop-filter: blur(3px);
+    padding: 20px;
+  }
+  .stage-overlay[hidden] { display: none; }
+  .stage-overlay h3 { margin: 0 0 8px; font-size: 15px; letter-spacing: .1em; color: #e8ecf2; }
+  .stage-overlay p { font-size: 12px; color: var(--muted); max-width: 420px; margin: 0 auto 16px; line-height: 1.6; }
+  .bigbtn {
+    padding: 11px 28px;
+    background: linear-gradient(180deg, rgba(63,167,160,.26), rgba(63,167,160,.13));
+    border: 1px solid rgba(63,167,160,.55); border-radius: 9px;
+    color: #d5f3f0; font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
+    transition: background .18s, box-shadow .18s;
+  }
+  .bigbtn:hover { background: linear-gradient(180deg, rgba(63,167,160,.4), rgba(63,167,160,.2)); box-shadow: 0 0 26px rgba(63,167,160,.25); }
+  .bigbtn:disabled { opacity: .4; box-shadow: none; }
+
+  .hud {
+    position: absolute; top: 10px; left: 12px; z-index: 4;
+    font-size: 11px; letter-spacing: .05em; color: var(--text);
+    background: rgba(9,11,15,.55); border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 10px; line-height: 1.7; pointer-events: none;
+  }
+  .hud b { color: var(--accent); }
+  .hud .miss { color: var(--dread); }
+
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  .row + .row { margin-top: 10px; }
+  .ctl { display: flex; flex-direction: column; gap: 5px; }
+  .ctl label { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+  .ctl select, .ctl input[type=number] {
+    background: #090b0f; color: var(--text); border: 1px solid var(--line);
+    border-radius: 7px; padding: 7px 9px; font-size: 12.5px; outline: none;
+  }
+  .ctl input[type=range] { width: 180px; }
+
+  .stat { text-align: center; }
+  .stat .n { font-size: 20px; color: var(--accent); font-weight: 600; }
+  .stat .l { font-size: 9px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); margin-top: 3px; }
+  .statrow { display: flex; gap: 26px; justify-content: center; margin: 6px 0 4px; flex-wrap: wrap; }
+
+  /* -------------------------------------------------------------- convert */
+  .convgrid { display: grid; grid-template-columns: 1fr auto 1fr; gap: 14px; align-items: end; margin-bottom: 8px; }
+  .convgrid .arrow { padding-bottom: 10px; color: var(--dim); font-size: 18px; }
+  @media (max-width: 640px) { .convgrid { grid-template-columns: 1fr; } .convgrid .arrow { display: none; } }
+
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-size: 9.5px; letter-spacing: .14em; text-transform: uppercase; font-weight: 500; }
+  td.num { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--accent); }
+  tr.hi td { background: rgba(63,167,160,.07); }
+  .tablewrap { overflow-x: auto; }
+
+  /* --------------------------------------------------------------- finder */
+  .ladder { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+  .lstep {
+    display: grid; grid-template-columns: 90px 1fr 70px 70px 60px; gap: 10px; align-items: center;
+    font-size: 11.5px; padding: 7px 9px; border-radius: 7px; background: rgba(255,255,255,.02);
+    border: 1px solid var(--line);
+  }
+  .lstep.active { border-color: rgba(63,167,160,.5); background: rgba(63,167,160,.07); }
+  .lstep.best { border-color: rgba(216,178,63,.55); background: rgba(216,178,63,.08); }
+  .lstep .bar { height: 6px; border-radius: 3px; background: var(--panel-3); overflow: hidden; }
+  .lstep .bar i { display: block; height: 100%; background: var(--accent); }
+  .lstep .n { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: var(--text); }
+  .lstep .n.dim { color: var(--dim); }
+  @media (max-width: 640px) { .lstep { grid-template-columns: 70px 1fr 50px; } .lstep .n:nth-child(4) { display:none; } }
+
+  .callout {
+    margin-top: 14px; padding: 14px 16px; border-radius: 10px; text-align: center;
+    background: rgba(216,178,63,.08); border: 1px solid rgba(216,178,63,.35);
+  }
+  .callout .big { font-size: 22px; color: var(--gold); font-weight: 700; }
+  .callout .small { font-size: 10.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--dim); margin-top: 4px; }
+
+  /* ---------------------------------------------------------------- notes */
+  .noteitem { display: flex; gap: 10px; margin-bottom: 12px; }
+  .noteitem .dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 6px; opacity: .7; }
+  .noteitem div { font-size: 12px; line-height: 1.65; color: var(--muted); }
+  .noteitem b { color: var(--text); }
+
+  .warn {
+    padding: 12px 14px; border-radius: 9px; margin-top: 6px;
+    background: rgba(194,69,63,.06); border: 1px solid rgba(194,69,63,.22);
+    font-size: 11.5px; line-height: 1.6; color: var(--muted);
+  }
+  .warn b { color: var(--dread); }
+
+  ::selection { background: rgba(63,167,160,.35); }
+</style>
+</head>
+<body>
+
+<a class="backlink" href="index.html">← Library</a>
+
+<div class="wrap">
+  <div class="brand"><b>S</b>ENS FINDER</div>
+  <div class="tagline">Find your mouse sensitivity, then take it anywhere</div>
+
+  <div class="globals">
+    <div class="gfield">
+      <label for="g-dpi">Mouse DPI</label>
+      <input id="g-dpi" type="number" min="100" max="32000" step="50" value="800">
+    </div>
+    <div class="gfield">
+      <label for="g-cm360">cm / 360°</label>
+      <input id="g-cm360" type="number" min="2" max="150" step="0.1" value="30">
+    </div>
+    <div class="gfield">
+      <label>in / 360°</label>
+      <div class="readout mono" id="g-in360">—</div>
+    </div>
+    <div class="gfield">
+      <label>counts / 360°</label>
+      <div class="readout mono" id="g-counts360">—</div>
+    </div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab on" data-view="trainer">Flick Trainer</button>
+    <button class="tab" data-view="finder">Auto Finder</button>
+    <button class="tab" data-view="convert">Convert</button>
+    <button class="tab" data-view="notes">Notes &amp; Roadblocks</button>
+  </div>
+
+  <!-- ============================================================ trainer -->
+  <section class="view" id="view-trainer">
+    <div class="card">
+      <h2>Flick Trainer</h2>
+      <p>Click the stage to lock your mouse, then flick to each target and click it. Tune <span class="mono">cm/360</span> above (or the slider below) until flicks land on target without overshooting — that's your sensitivity.</p>
+
+      <div class="stage" id="stage">
+        <canvas id="cv"></canvas>
+        <div class="hud" id="hud" hidden>
+          Hits <b id="hud-hits">0</b> · Streak <b id="hud-streak">0</b><br>
+          Avg time <b id="hud-avg">—</b> · Overshoot <b class="miss" id="hud-over">0%</b>
+        </div>
+        <div class="stage-overlay" id="overlay">
+          <div>
+            <h3>Click to start</h3>
+            <p id="overlay-text">Locks your mouse to the stage — click a target to hit it. Press Esc anytime to release the mouse.</p>
+            <button class="bigbtn" id="lockbtn">Click to lock mouse</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="ctl">
+          <label>cm/360 (live)</label>
+          <input type="range" id="t-sens" min="8" max="90" step="0.5" value="30">
+        </div>
+        <div class="ctl">
+          <label>Target size</label>
+          <select id="t-size">
+            <option value="1.1">Small</option>
+            <option value="1.7" selected>Medium</option>
+            <option value="2.5">Large</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>Display FOV</label>
+          <select id="t-fov">
+            <option value="70">70°</option>
+            <option value="90" selected>90°</option>
+            <option value="103">103°</option>
+            <option value="120">120°</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>&nbsp;</label>
+          <button class="bigbtn" id="t-reset" style="padding:7px 16px;font-size:10px;">Reset stats</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================== finder -->
+  <section class="view" id="view-finder" hidden>
+    <div class="card">
+      <h2>Auto Sens Finder</h2>
+      <p>Runs a short flick test at seven sensitivities spread around your starting guess (same target pattern every time, for a fair comparison), then recommends the one with the best speed-vs-overshoot balance — the same idea as SteelSeries' and Aim Lab's sens matchers.</p>
+
+      <div class="row">
+        <div class="ctl">
+          <label>Starting guess (cm/360)</label>
+          <input type="number" id="f-guess" min="5" max="120" step="0.5" value="30">
+        </div>
+        <div class="ctl">
+          <label>Targets per step</label>
+          <select id="f-count">
+            <option value="5">5 (fast)</option>
+            <option value="8" selected>8</option>
+            <option value="12">12 (thorough)</option>
+          </select>
+        </div>
+        <div class="ctl">
+          <label>&nbsp;</label>
+          <button class="bigbtn" id="f-start">Start test</button>
+        </div>
+      </div>
+
+      <div class="stage" id="fstage" style="margin-top:14px;">
+        <canvas id="fcv"></canvas>
+        <div class="hud" id="fhud" hidden>
+          Step <b id="fhud-step">—</b> · Testing <b id="fhud-cm">—</b> cm/360<br>
+          Target <b id="fhud-n">0</b>
+        </div>
+        <div class="stage-overlay" id="foverlay">
+          <div>
+            <h3>Ready when you are</h3>
+            <p>Set a starting guess above, then press Start test. The stage will ask to lock your mouse.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="ladder" id="ladder"></div>
+      <div class="callout" id="fresult" hidden>
+        <div class="big" id="fresult-cm">—</div>
+        <div class="small">Recommended cm/360 · <span id="fresult-dpi"></span></div>
+      </div>
+      <div class="row" id="fresult-actions" hidden style="margin-top:12px; justify-content:center;">
+        <button class="bigbtn" id="f-use">Use this in Flick Trainer</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================================================= convert -->
+  <section class="view" id="view-convert" hidden>
+    <div class="card">
+      <h2>Game to game converter</h2>
+      <p>Sensitivity doesn't carry over between games because each engine turns a different number of degrees per mouse count. Pick two games below and it converts using your DPI and cm/360 above — same physical hand movement, same in-game turn.</p>
+
+      <div class="convgrid">
+        <div class="ctl">
+          <label>From</label>
+          <select id="c-from"></select>
+        </div>
+        <div class="arrow">→</div>
+        <div class="ctl">
+          <label>To</label>
+          <select id="c-to"></select>
+        </div>
+      </div>
+      <div class="row">
+        <div class="ctl">
+          <label id="c-from-lbl">Sens in From</label>
+          <input type="number" id="c-fromsens" min="0.0001" step="0.01" value="1">
+        </div>
+        <div class="ctl">
+          <label id="c-to-lbl">Sens needed in To</label>
+          <div class="readout mono" id="c-tosens" style="font-size:16px;">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Every supported game at your current cm/360</h2>
+      <p>Set your feel in the Flick Trainer (or type a cm/360 above), then read off the exact sensitivity to type into any of these.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Game</th><th>Yaw (°/count)</th><th>Sens to set</th></tr></thead>
+          <tbody id="c-table"></tbody>
+        </table>
+      </div>
+      <div class="warn">
+        <b>Accuracy note:</b> yaw constants are community-verified values cross-referenced against public sensitivity databases, not pulled live from each game — treat them as close approximations. Games sharing an engine (CS2/CS:GO/TF2/Apex/Titanfall 2, all built on Source-derived tech) use that engine's documented default of 0.022°/count.
+      </div>
+    </div>
+  </section>
+
+  <!-- =============================================================== notes -->
+  <section class="view" id="view-notes" hidden>
+    <div class="card">
+      <h2>How the measurement actually works</h2>
+      <div class="noteitem"><div class="dot"></div><div>The trainer turns your view by <b>mouse pixels × DPI-derived degrees-per-count</b>, using the browser's <b>Pointer Lock API</b> for relative mouse movement instead of absolute cursor position. That's the same relative-delta approach games use, just without direct access to raw HID counts.</div></div>
+      <div class="noteitem"><div class="dot"></div><div>1 browser "pixel" of movement is treated as ≈1 raw mouse count. That assumption holds well on <b>Windows</b> when pointer speed is left at the default <b>6/11</b> and "Enhance pointer precision" is <b>off</b> — the standard "raw input" setup most competitive players already use.</div></div>
+      <div class="noteitem"><div class="dot"></div><div>The Convert tab's math (yaw constants, cm/360 formula) doesn't depend on any of this — it's pure arithmetic from your DPI and cm/360, so it's exact regardless of platform. Only the <b>feel</b> in the Flick Trainer is affected by the roadblocks below.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Known roadblocks (browser vs. native game)</h2>
+      <div class="noteitem"><div class="dot"></div><div><b>No raw HID access.</b> Browsers can't read raw mouse-controller counts the way a game's raw input thread can — Pointer Lock gives OS-processed pixel deltas. Windows with default pointer curve settings tracks 1:1 closely; anything else introduces drift.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>macOS mouse acceleration can't be fully disabled from a webpage.</b> macOS applies its own cursor-speed curve system-wide, including in Safari/Chrome. Trackpads make this worse — they use an entirely different acceleration curve. For a closer 1:1 feel on Mac, third-party tools like <b>Mos</b>, <b>SteerMouse</b>, or <b>LinearMouse</b> can flatten the curve; the browser itself has no setting for this.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>DPI can't be read from the OS or mouse.</b> There's no browser API for it — it has to be typed in from your mouse's software/manual. A wrong DPI value throws off every cm/360 and converter number on this page.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>Pointer Lock support varies.</b> Chrome, Firefox and Edge support it fully; Safari on macOS supports it but has historically been less consistent about it; there's no equivalent on iOS/iPadOS/Android since there's no relative-motion mouse input there at all — this tool is desktop-mouse only.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>Very fast flicks can outrun a single animation frame.</b> The page samples <span class="mono">getCoalescedEvents()</span> where the browser exposes it (Chromium) to recover sub-frame mouse samples instead of only the last one per frame; Firefox/Safari don't expose that API, so very fast flicks there are averaged per-frame instead, which is slightly less precise.</div></div>
+      <div class="noteitem"><div class="dot"></div><div><b>Yaw constants can drift.</b> They're the community-verified defaults for each engine at the time this was built (Aug 2026) — a developer changing the default sensitivity scaling in an update would make that one row stale until updated here.</div></div>
+      <div id="feature-warn"></div>
+    </div>
+
+    <div class="card">
+      <h2>What's next</h2>
+      <p>This is the web version — it gets you a real, usable cm/360 and exact per-game numbers today. A native build (using real raw-input APIs on Windows/Mac/Linux) would remove the OS pointer-curve roadblock entirely and could read DPI straight from supported mice; that's the natural next step once this version's been road-tested.</p>
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  var $ = function (id) { return document.getElementById(id); };
+  var TAU = Math.PI * 2, D2R = Math.PI / 180, R2D = 180 / Math.PI;
+  function clamp(v, lo, hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+  // ================================================================== state
+  // Single source of truth for DPI / cm-per-360, shared by every tab and
+  // persisted so a tuned sensitivity survives a reload.
+
+  var state = {
+    dpi: 800,
+    cm360: 30
+  };
+
+  (function loadState() {
+    try {
+      var raw = localStorage.getItem('sensfinder.state.v1');
+      if (raw) {
+        var s = JSON.parse(raw);
+        if (s && s.dpi > 0) state.dpi = s.dpi;
+        if (s && s.cm360 > 0) state.cm360 = s.cm360;
+      }
+    } catch (e) {}
+  })();
+
+  function saveState() {
+    try { localStorage.setItem('sensfinder.state.v1', JSON.stringify(state)); } catch (e) {}
+  }
+
+  // Effective yaw-per-count implied by the current cm/360 + DPI, independent
+  // of any single game. cm360 = 2.54 * 360 / (E * dpi)  =>  E = 2.54*360/(cm360*dpi)
+  function effectiveYaw() {
+    return (2.54 * 360) / (state.cm360 * state.dpi);
+  }
+
+  function refreshGlobals() {
+    var counts360 = state.cm360 / 2.54 * state.dpi;
+    $('g-in360').textContent = (state.cm360 / 2.54).toFixed(2);
+    $('g-counts360').textContent = Math.round(counts360).toLocaleString();
+  }
+
+  $('g-dpi').value = state.dpi;
+  $('g-cm360').value = state.cm360;
+
+  $('g-dpi').addEventListener('input', function () {
+    var v = parseFloat(this.value);
+    if (v > 0) { state.dpi = v; saveState(); refreshGlobals(); renderConvertTable(); syncTrainerSlider(); }
+  });
+  $('g-cm360').addEventListener('input', function () {
+    var v = parseFloat(this.value);
+    if (v > 0) { state.cm360 = v; saveState(); refreshGlobals(); renderConvertTable(); syncTrainerSlider(); }
+  });
+
+  function setCm360(v) {
+    state.cm360 = v;
+    saveState();
+    $('g-cm360').value = v;
+    refreshGlobals();
+    renderConvertTable();
+    syncTrainerSlider();
+  }
+
+  refreshGlobals();
+
+  // =================================================================== tabs
+  var VIEWS = ['trainer', 'finder', 'convert', 'notes'];
+  function showView(name) {
+    VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
+    Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
+      b.classList.toggle('on', b.dataset.view === name);
+    });
+  }
+  Array.prototype.forEach.call(document.querySelectorAll('.tab'), function (b) {
+    b.addEventListener('click', function () { showView(b.dataset.view); });
+  });
+
+  // Pointer Lock feature-detect, surfaced both as an inline banner and in Notes.
+  var PL_SUPPORTED = 'pointerLockElement' in document || 'mozPointerLockElement' in document;
+  if (!PL_SUPPORTED) {
+    var w = document.createElement('div');
+    w.className = 'warn';
+    w.innerHTML = '<b>Heads up:</b> this browser does not support the Pointer Lock API, so the Flick Trainer and Auto Finder can\'t run here. The Convert tab above still works fully — try Chrome, Firefox, or Edge for the trainer.';
+    $('feature-warn').appendChild(w);
+  }
+
+  // =============================================================== audio
+  // Lazily created inside a real user gesture (the lock-click), matching the
+  // pattern used elsewhere in this project — WebKit permanently locks an
+  // AudioContext created any other way.
+  var audio = null;
+  function initAudio() {
+    if (audio || !(window.AudioContext || window.webkitAudioContext)) return;
+    audio = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  function blip(freq, dur, gainPeak) {
+    if (!audio) return;
+    var o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine'; o.frequency.value = freq;
+    g.gain.setValueAtTime(0, audio.currentTime);
+    g.gain.linearRampToValueAtTime(gainPeak, audio.currentTime + 0.01);
+    g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
+    o.connect(g); g.connect(audio.destination);
+    o.start(); o.stop(audio.currentTime + dur + 0.02);
+  }
+  function hitSound() { blip(880, 0.09, 0.18); }
+  function missSound() { blip(160, 0.14, 0.14); }
+
+  // ============================================================== rng / vec
+  function mulberry32(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      var t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  function dirFromAngles(yawDeg, pitchDeg) {
+    var yaw = yawDeg * D2R, pitch = pitchDeg * D2R;
+    var cp = Math.cos(pitch);
+    return { x: cp * Math.sin(yaw), y: Math.sin(pitch), z: cp * Math.cos(yaw) };
+  }
+  function dot3(a, b) { return a.x * b.x + a.y * b.y + a.z * b.z; }
+  function norm3(a) {
+    var l = Math.sqrt(dot3(a, a)) || 1;
+    return { x: a.x / l, y: a.y / l, z: a.z / l };
+  }
+
+  // ========================================================= trainer engine
+  // Shared by the free-play Flick Trainer and the scripted Auto Finder — both
+  // just drive the same camera/spawn/projection core with different rules
+  // for when a new target appears.
+
+  function makeEngine(canvas, opts) {
+    var ctx = canvas.getContext('2d');
+    var eng = {
+      canvas: canvas, ctx: ctx,
+      camYaw: 0, camPitch: 0,
+      fovDeg: 90,
+      target: null,          // { yaw, pitch, radiusDeg, spawnAt, insideCore }
+      locked: false,
+      raf: 0,
+      movBuf: { x: 0, y: 0 },
+      stars: [],
+      running: false,
+      rng: Math.random,
+      onHit: null, onMiss: null, onSpawn: null,
+      spawnMinDeg: 10, spawnMaxDeg: 28,
+      radiusDeg: 1.7
+    };
+
+    for (var i = 0; i < 90; i++) {
+      eng.stars.push({
+        yaw: eng.rng() * 360,
+        pitch: (eng.rng() * 160) - 80,
+        r: 0.6 + eng.rng() * 1.1
+      });
+    }
+
+    function resize() {
+      var rect = canvas.getBoundingClientRect();
+      var dpr = window.devicePixelRatio || 1;
+      canvas.width = Math.max(1, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(1, Math.floor(rect.height * dpr));
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      eng.w = rect.width; eng.h = rect.height;
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    function camBasis() {
+      var forward = dirFromAngles(eng.camYaw, eng.camPitch);
+      var right = norm3({ x: Math.cos(eng.camYaw * D2R), y: 0, z: -Math.sin(eng.camYaw * D2R) });
+      var up = { x: forward.y * right.z - forward.z * right.y,
+                 y: forward.z * right.x - forward.x * right.z,
+                 z: forward.x * right.y - forward.y * right.x };
+      return { forward: forward, right: right, up: up };
+    }
+
+    function project(dir, basis, focal, cx, cy) {
+      var vx = dot3(dir, basis.right), vy = dot3(dir, basis.up), vz = dot3(dir, basis.forward);
+      if (vz <= 0.02) return null;
+      return { x: cx + (vx / vz) * focal, y: cy - (vy / vz) * focal, vz: vz };
+    }
+
+    function newTarget() {
+      var spread = eng.spawnMinDeg + eng.rng() * (eng.spawnMaxDeg - eng.spawnMinDeg);
+      var ang = eng.rng() * TAU;
+      var oyaw = Math.cos(ang) * spread, opitch = Math.sin(ang) * spread * 0.7;
+      eng.target = {
+        yaw: eng.camYaw + oyaw,
+        pitch: clamp(eng.camPitch + opitch, -65, 65),
+        radiusDeg: eng.radiusDeg,
+        spawnAt: performance.now(),
+        insideCore: false
+      };
+      if (eng.onSpawn) eng.onSpawn(eng.target);
+    }
+    eng.newTarget = newTarget;
+
+    function angularDistDeg(dir) {
+      var f = dirFromAngles(eng.camYaw, eng.camPitch);
+      return Math.acos(clamp(dot3(f, dir), -1, 1)) * R2D;
+    }
+
+    function applyMovement(dx, dy) {
+      var E = eng.yawOverride != null ? eng.yawOverride : effectiveYaw();
+      eng.camYaw = (eng.camYaw + dx * E) % 360;
+      if (eng.camYaw < 0) eng.camYaw += 360;
+      eng.camPitch = clamp(eng.camPitch - dy * E, -89, 89);
+    }
+
+    function onPointerMove(e) {
+      if (!eng.locked) return;
+      var dx = 0, dy = 0;
+      if (typeof e.getCoalescedEvents === 'function') {
+        var evs = e.getCoalescedEvents();
+        if (evs && evs.length) {
+          for (var i = 0; i < evs.length; i++) { dx += evs[i].movementX; dy += evs[i].movementY; }
+        } else { dx = e.movementX; dy = e.movementY; }
+      } else {
+        dx = e.movementX; dy = e.movementY;
+      }
+      applyMovement(dx, dy);
+    }
+
+    function onClick() {
+      if (!eng.locked || !eng.target) return;
+      var t = eng.target;
+      var dir = dirFromAngles(t.yaw, t.pitch);
+      var dist = angularDistDeg(dir);
+      var ms = performance.now() - t.spawnAt;
+      if (dist <= t.radiusDeg) {
+        hitSound();
+        var overshoot = !!t.overshootFlag;
+        eng.target = null;
+        if (eng.onHit) eng.onHit({ ms: ms, overshoot: overshoot });
+      } else {
+        missSound();
+        if (eng.onMiss) eng.onMiss();
+      }
+    }
+
+    function frame() {
+      if (!eng.running) return;
+      eng.raf = requestAnimationFrame(frame);
+
+      var basis = camBasis();
+      var focal = (eng.w / 2) / Math.tan((eng.fovDeg / 2) * D2R);
+      var cx = eng.w / 2, cy = eng.h / 2;
+
+      ctx.clearRect(0, 0, eng.w, eng.h);
+      // backdrop
+      var grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(eng.w, eng.h) * 0.7);
+      grad.addColorStop(0, '#0b0f14'); grad.addColorStop(1, '#05060a');
+      ctx.fillStyle = grad; ctx.fillRect(0, 0, eng.w, eng.h);
+
+      // stars (depth cue, purely decorative)
+      ctx.fillStyle = 'rgba(150,190,200,0.5)';
+      for (var i = 0; i < eng.stars.length; i++) {
+        var s = eng.stars[i];
+        var p = project(dirFromAngles(s.yaw, s.pitch), basis, focal, cx, cy);
+        if (!p || p.x < -20 || p.x > eng.w + 20 || p.y < -20 || p.y > eng.h + 20) continue;
+        var rr = s.r / p.vz;
+        ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0.4, rr), 0, TAU); ctx.fill();
+      }
+
+      // target
+      if (eng.target) {
+        var t = eng.target;
+        var dir = dirFromAngles(t.yaw, t.pitch);
+        var dist = angularDistDeg(dir);
+        if (dist < t.radiusDeg * 0.6) t.insideCore = true;
+        else if (t.insideCore && dist > t.radiusDeg) t.overshootFlag = true;
+
+        var pr = project(dir, basis, focal, cx, cy);
+        if (pr) {
+          var rad = Math.max(3, (t.radiusDeg * D2R * focal) / pr.vz);
+          var age = performance.now() - t.spawnAt;
+          var pulse = 1 + 0.06 * Math.sin(age / 130);
+          ctx.beginPath();
+          ctx.arc(pr.x, pr.y, rad * pulse, 0, TAU);
+          ctx.fillStyle = t.overshootFlag ? 'rgba(194,69,63,0.28)' : 'rgba(63,167,160,0.28)';
+          ctx.fill();
+          ctx.lineWidth = 2;
+          ctx.strokeStyle = t.overshootFlag ? '#c2453f' : '#3fa7a0';
+          ctx.stroke();
+          ctx.beginPath(); ctx.arc(pr.x, pr.y, rad * 0.28, 0, TAU);
+          ctx.fillStyle = '#eafffc';
+          ctx.fill();
+        }
+      }
+
+      // crosshair
+      ctx.strokeStyle = 'rgba(232,236,242,0.85)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(cx - 9, cy); ctx.lineTo(cx - 3, cy);
+      ctx.moveTo(cx + 3, cy); ctx.lineTo(cx + 9, cy);
+      ctx.moveTo(cx, cy - 9); ctx.lineTo(cx, cy - 3);
+      ctx.moveTo(cx, cy + 3); ctx.lineTo(cx, cy + 9);
+      ctx.stroke();
+
+      if (eng.onFrame) eng.onFrame();
+    }
+
+    function start() {
+      eng.running = true;
+      eng.raf = requestAnimationFrame(frame);
+    }
+    function stop() {
+      eng.running = false;
+      if (eng.raf) cancelAnimationFrame(eng.raf);
+    }
+
+    // pointermove (not mousemove) — getCoalescedEvents() only exists on PointerEvent.
+    canvas.addEventListener('pointermove', onPointerMove);
+    canvas.addEventListener('click', onClick);
+
+    eng.resize = resize;
+    eng.start = start;
+    eng.stop = stop;
+    eng.camBasis = camBasis;
+    return eng;
+  }
+
+  // ========================================================= trainer (tab1)
+  var stageEl = $('stage'), cv = $('cv'), overlay = $('overlay'), hud = $('hud');
+  var trainer = makeEngine(cv, {});
+  trainer.radiusDeg = 1.7;
+  trainer.spawnMinDeg = 8; trainer.spawnMaxDeg = 24;
+
+  var tstats = { hits: 0, streak: 0, totalMs: 0, overshoots: 0, misses: 0 };
+
+  function resetTStats() {
+    tstats = { hits: 0, streak: 0, totalMs: 0, overshoots: 0, misses: 0 };
+    updateHud();
+  }
+  function updateHud() {
+    $('hud-hits').textContent = tstats.hits;
+    $('hud-streak').textContent = tstats.streak;
+    $('hud-avg').textContent = tstats.hits ? Math.round(tstats.totalMs / tstats.hits) + 'ms' : '—';
+    $('hud-over').textContent = tstats.hits ? Math.round((tstats.overshoots / tstats.hits) * 100) + '%' : '0%';
+  }
+
+  trainer.onHit = function (r) {
+    tstats.hits++; tstats.streak++; tstats.totalMs += r.ms;
+    if (r.overshoot) tstats.overshoots++;
+    updateHud();
+    trainer.newTarget();
+  };
+  trainer.onMiss = function () {
+    tstats.streak = 0; tstats.misses++;
+    updateHud();
+  };
+
+  function syncTrainerSlider() {
+    $('t-sens').value = state.cm360;
+  }
+  syncTrainerSlider();
+  $('t-sens').addEventListener('input', function () {
+    setCm360(parseFloat(this.value));
+  });
+  $('t-size').addEventListener('change', function () {
+    trainer.radiusDeg = parseFloat(this.value);
+  });
+  trainer.radiusDeg = parseFloat($('t-size').value);
+  $('t-fov').addEventListener('change', function () {
+    trainer.fovDeg = parseFloat(this.value);
+  });
+  trainer.fovDeg = parseFloat($('t-fov').value);
+  $('t-reset').addEventListener('click', resetTStats);
+
+  function requestLock(canvasEl) {
+    initAudio();
+    var p = canvasEl.requestPointerLock();
+    if (p && typeof p.catch === 'function') p.catch(function () {});
+  }
+
+  $('lockbtn').addEventListener('click', function () { requestLock(cv); });
+  stageEl.addEventListener('click', function () {
+    if (!trainer.locked && document.pointerLockElement !== cv) requestLock(cv);
+  });
+
+  document.addEventListener('pointerlockchange', function () {
+    var lockedHere = document.pointerLockElement === cv;
+    trainer.locked = lockedHere;
+    overlay.hidden = lockedHere;
+    hud.hidden = !lockedHere;
+    if (lockedHere) {
+      if (!trainer.target) trainer.newTarget();
+      trainer.start();
+    } else {
+      trainer.stop();
+    }
+  });
+  document.addEventListener('pointerlockerror', function () {
+    $('overlay-text').textContent = 'The browser refused to lock the pointer. Some browsers require the page to be in focus, or block it in an iframe — try clicking again, or open this file directly in a new tab.';
+  });
+
+  // ==================================================== auto finder (tab 2)
+  var fstageEl = $('fstage'), fcv = $('fcv'), foverlay = $('foverlay'), fhud = $('fhud');
+  var finder = makeEngine(fcv, {});
+  finder.radiusDeg = 1.8;
+  finder.spawnMinDeg = 10; finder.spawnMaxDeg = 26;
+
+  var LADDER_MULT = [0.55, 0.7, 0.85, 1, 1.2, 1.45, 1.75];
+  var fRun = null; // { steps: [{cm, times:[], overshoots, n}], stepIdx, hitIdx, seed, targetsPerStep }
+
+  function fmtScore(step) {
+    if (!step.times.length) return null;
+    var avg = step.times.reduce(function (a, b) { return a + b; }, 0) / step.times.length;
+    var overRate = step.overshoots / step.times.length;
+    return { avg: avg, overRate: overRate, score: avg * (1 + overRate * 0.6) };
+  }
+
+  function renderLadder() {
+    var box = $('ladder'); box.innerHTML = '';
+    if (!fRun) return;
+    var scored = fRun.steps.map(fmtScore);
+    var bestIdx = -1, bestScore = Infinity;
+    scored.forEach(function (s, i) { if (s && s.score < bestScore) { bestScore = s.score; bestIdx = i; } });
+    var maxAvg = 1;
+    scored.forEach(function (s) { if (s) maxAvg = Math.max(maxAvg, s.avg); });
+
+    fRun.steps.forEach(function (step, i) {
+      var s = scored[i];
+      var row = document.createElement('div');
+      row.className = 'lstep' + (i === fRun.stepIdx && fRun.active ? ' active' : '') + (i === bestIdx && fRun.done ? ' best' : '');
+      var barPct = s ? Math.round((s.avg / maxAvg) * 100) : 0;
+      row.innerHTML =
+        '<div class="n">' + step.cm.toFixed(1) + ' cm</div>' +
+        '<div class="bar"><i style="width:' + barPct + '%"></i></div>' +
+        '<div class="n">' + (s ? Math.round(s.avg) + 'ms' : '—') + '</div>' +
+        '<div class="n dim">' + (s ? Math.round(s.overRate * 100) + '% ovr' : '—') + '</div>' +
+        '<div class="n dim">' + step.times.length + '/' + fRun.targetsPerStep + '</div>';
+      box.appendChild(row);
+    });
+  }
+
+  function startFinderRun() {
+    var guess = clamp(parseFloat($('f-guess').value) || state.cm360, 5, 120);
+    var n = parseInt($('f-count').value, 10) || 8;
+    fRun = {
+      steps: LADDER_MULT.map(function (m) { return { cm: guess * m, times: [], overshoots: 0 }; }),
+      stepIdx: 0,
+      targetsPerStep: n,
+      seed: Math.floor(Math.random() * 1e9),
+      active: false,
+      done: false
+    };
+    finder.rng = mulberry32(fRun.seed);
+    $('fresult').hidden = true;
+    $('fresult-actions').hidden = true;
+    renderLadder();
+    requestLock(fcv);
+  }
+  $('f-start').addEventListener('click', startFinderRun);
+
+  function beginStep() {
+    if (!fRun) return;
+    fRun.active = true;
+    var step = fRun.steps[fRun.stepIdx];
+    finder.yawOverride = (2.54 * 360) / (step.cm * state.dpi);
+    $('fhud-step').textContent = (fRun.stepIdx + 1) + ' / ' + fRun.steps.length;
+    $('fhud-cm').textContent = step.cm.toFixed(1);
+    $('fhud-n').textContent = '0 / ' + fRun.targetsPerStep;
+    finder.rng = mulberry32(fRun.seed); // same seed every step, so every sensitivity faces the identical spawn sequence
+    finder.newTarget();
+    renderLadder();
+  }
+
+  function finishRun() {
+    fRun.active = false;
+    fRun.done = true;
+    finder.yawOverride = null;
+    finder.stop();
+    if (document.pointerLockElement === fcv) document.exitPointerLock();
+
+    var scored = fRun.steps.map(fmtScore);
+    var bestIdx = -1, bestScore = Infinity;
+    scored.forEach(function (s, i) { if (s && s.score < bestScore) { bestScore = s.score; bestIdx = i; } });
+    renderLadder();
+
+    if (bestIdx >= 0) {
+      var rec = fRun.steps[bestIdx].cm;
+      $('fresult-cm').textContent = rec.toFixed(1) + ' cm/360';
+      $('fresult-dpi').textContent = state.dpi + ' DPI';
+      $('fresult').hidden = false;
+      $('fresult-actions').hidden = false;
+      $('f-use').onclick = function () { setCm360(Math.round(rec * 10) / 10); showView('trainer'); };
+
+      try {
+        var hist = JSON.parse(localStorage.getItem('sensfinder.history.v1') || '[]');
+        hist.unshift({ at: Date.now(), cm360: rec, dpi: state.dpi });
+        localStorage.setItem('sensfinder.history.v1', JSON.stringify(hist.slice(0, 20)));
+      } catch (e) {}
+    }
+  }
+
+  finder.onHit = function (r) {
+    var step = fRun.steps[fRun.stepIdx];
+    step.times.push(r.ms);
+    if (r.overshoot) step.overshoots++;
+    $('fhud-n').textContent = step.times.length + ' / ' + fRun.targetsPerStep;
+    renderLadder();
+
+    if (step.times.length >= fRun.targetsPerStep) {
+      fRun.stepIdx++;
+      if (fRun.stepIdx >= fRun.steps.length) { finishRun(); return; }
+      setTimeout(beginStep, 260);
+    } else {
+      finder.newTarget();
+    }
+  };
+  finder.onMiss = function () { /* a whiffed click just doesn't advance — no penalty beyond lost time */ };
+
+  document.addEventListener('pointerlockchange', function () {
+    var lockedHere = document.pointerLockElement === fcv;
+    finder.locked = lockedHere;
+    foverlay.hidden = lockedHere || (fRun && fRun.done);
+    fhud.hidden = !lockedHere;
+    if (lockedHere && fRun && !fRun.done) {
+      finder.start();
+      if (!fRun.active) beginStep();
+    } else if (!lockedHere) {
+      finder.stop();
+    }
+  });
+
+  // ================================================================ convert
+  var GAMES = [
+    { name: 'Valorant', yaw: 0.07 },
+    { name: 'CS2', yaw: 0.022 },
+    { name: 'CS:GO', yaw: 0.022 },
+    { name: 'Team Fortress 2', yaw: 0.022 },
+    { name: 'Apex Legends', yaw: 0.022 },
+    { name: 'Titanfall 2', yaw: 0.022 },
+    { name: 'Marvel Rivals', yaw: 0.022 },
+    { name: 'Deadlock', yaw: 0.044 },
+    { name: 'Overwatch 2', yaw: 0.0066 },
+    { name: 'Call of Duty: Warzone / MW', yaw: 0.0066 },
+    { name: 'The Finals', yaw: 0.0066 },
+    { name: 'Destiny 2', yaw: 0.0066 },
+    { name: 'Rainbow Six Siege', yaw: 0.00572958 },
+    { name: 'Fortnite', yaw: 0.005555 },
+    { name: 'Rust', yaw: 0.11247 },
+    { name: 'Roblox', yaw: 0.39783 }
+  ];
+
+  var cFrom = $('c-from'), cTo = $('c-to');
+  GAMES.forEach(function (g, i) {
+    var o1 = document.createElement('option'); o1.value = i; o1.textContent = g.name; cFrom.appendChild(o1);
+    var o2 = document.createElement('option'); o2.value = i; o2.textContent = g.name; cTo.appendChild(o2);
+  });
+  cFrom.selectedIndex = 0; cTo.selectedIndex = 1;
+
+  function sensForCm360(yaw) {
+    // cm360 = 2.54*360 / (sens*yaw*dpi)  =>  sens = 2.54*360 / (cm360*yaw*dpi)
+    return (2.54 * 360) / (state.cm360 * yaw * state.dpi);
+  }
+
+  function renderConverter() {
+    var from = GAMES[cFrom.value], to = GAMES[cTo.value];
+    $('c-from-lbl').textContent = 'Sens in ' + from.name;
+    $('c-to-lbl').textContent = 'Sens needed in ' + to.name;
+    var fromSens = parseFloat($('c-fromsens').value) || 0;
+    var toSens = fromSens * (from.yaw / to.yaw);
+    $('c-tosens').textContent = toSens ? toSens.toFixed(4) : '—';
+  }
+  cFrom.addEventListener('change', renderConverter);
+  cTo.addEventListener('change', renderConverter);
+  $('c-fromsens').addEventListener('input', renderConverter);
+  renderConverter();
+
+  function renderConvertTable() {
+    var body = $('c-table'); body.innerHTML = '';
+    GAMES.forEach(function (g) {
+      var tr = document.createElement('tr');
+      tr.innerHTML = '<td>' + g.name + '</td><td class="num">' + g.yaw + '</td><td class="num">' + sensForCm360(g.yaw).toFixed(4) + '</td>';
+      body.appendChild(tr);
+    });
+  }
+  renderConvertTable();
+
+  // Opened from the library, this page has its own tab/window with the
+  // library behind it — closing beats stacking a second hub on top of it.
+  var backlink = document.querySelector('.backlink');
+  if (backlink && window.opener) {
+    backlink.addEventListener('click', function (e) {
+      e.preventDefault();
+      window.close();
+    });
+  }
+
+})();
+</script>
+</body>
+</html>
