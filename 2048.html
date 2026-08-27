@@ -758,6 +758,18 @@
   reset();
   updateModeNote();
   refreshBoard();                        // fills the panel before the first run ends
+
+  // Opened as its own tab/window, this page starts with no session of its
+  // own — Nova.user() is null until the stored one is read back in, which is
+  // what left every run here posting as a guest even when signed in on the
+  // launcher. Non-blocking: the panel already painted as guest above, and
+  // corrects itself the moment this resolves.
+  if (window.Nova) {
+    window.Nova.restore().then(function () {
+      updateModeNote();
+      refreshBoard();
+    }).catch(function () {});
+  }
 })();
 </script>
 </body>

@@ -13,15 +13,15 @@
 <meta name="apple-mobile-web-app-title" content="Nova Games">
 <style>
   :root {
-    --bg: #07080b;
-    --panel: #0e1015;
-    --panel-2: #161a22;
-    --panel-3: #1c212b;
-    --line: #1e212a;
-    --text: #d8dbe2;
-    --muted: #79808f;
-    --dim: #4d5460;
-    --accent: #3fa7a0;
+    --bg: #12141b;
+    --panel: #191c24;
+    --panel-2: #20242f;
+    --panel-3: #292e3b;
+    --line: #2b303d;
+    --text: #eceff4;
+    --muted: #8b93a5;
+    --dim: #5f6779;
+    --accent: #e8973f;
     --dread: #c2453f;
   }
 
@@ -48,7 +48,7 @@
     position: fixed; inset: 0; z-index: 100;
     display: grid; place-items: center;
     background:
-      radial-gradient(900px 700px at 50% 42%, #101820 0%, transparent 72%),
+      radial-gradient(900px 700px at 50% 42%, #241d1a 0%, transparent 72%),
       var(--bg);
     overflow: hidden;
   }
@@ -63,14 +63,14 @@
     border: 1px solid var(--line);
     border-radius: 14px;
     padding: 30px 30px 24px;
-    box-shadow: 0 30px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(63,167,160,.06);
+    box-shadow: 0 30px 90px rgba(0,0,0,.7), 0 0 0 1px rgba(232,151,63,.06);
   }
 
   .auth-brand {
     text-align: center;
     font-size: 25px; letter-spacing: .3em; text-transform: uppercase;
     color: #e8ecf2;
-    text-shadow: 0 0 26px rgba(63,167,160,.5);
+    text-shadow: 0 0 26px rgba(232,151,63,.5);
   }
   .auth-brand b { color: var(--accent); font-weight: 700; }
   .auth-tagline {
@@ -87,8 +87,8 @@
   }
   .auth-tab:hover { color: var(--text); border-color: #2c313d; }
   .auth-tab.on {
-    color: var(--accent); border-color: rgba(63,167,160,.5);
-    background: rgba(63,167,160,.08);
+    color: var(--accent); border-color: rgba(232,151,63,.5);
+    background: rgba(232,151,63,.08);
   }
 
   .field { margin-bottom: 14px; }
@@ -105,15 +105,15 @@
     outline: none; transition: border-color .18s, box-shadow .18s;
   }
   .field input:focus {
-    border-color: rgba(63,167,160,.55);
-    box-shadow: 0 0 0 3px rgba(63,167,160,.1);
+    border-color: rgba(232,151,63,.55);
+    box-shadow: 0 0 0 3px rgba(232,151,63,.1);
   }
 
   .auth-note {
     margin: -4px 0 16px;
     font-size: 11px; line-height: 1.5; color: var(--dim);
     padding: 9px 11px; border-radius: 8px;
-    background: rgba(63,167,160,.05); border: 1px solid rgba(63,167,160,.18);
+    background: rgba(232,151,63,.05); border: 1px solid rgba(232,151,63,.18);
   }
   .auth-note b { color: var(--accent); font-weight: 600; }
 
@@ -124,15 +124,15 @@
 
   .btn-primary {
     width: 100%; padding: 12px 0;
-    background: linear-gradient(180deg, rgba(63,167,160,.22), rgba(63,167,160,.12));
+    background: linear-gradient(180deg, rgba(232,151,63,.22), rgba(232,151,63,.12));
     color: #cdeeea;
-    border: 1px solid rgba(63,167,160,.5); border-radius: 9px;
+    border: 1px solid rgba(232,151,63,.5); border-radius: 9px;
     font-size: 11.5px; letter-spacing: .2em; text-transform: uppercase;
     transition: background .18s, box-shadow .18s, color .18s;
   }
   .btn-primary:hover {
-    background: linear-gradient(180deg, rgba(63,167,160,.34), rgba(63,167,160,.18));
-    color: #eafffc; box-shadow: 0 0 26px rgba(63,167,160,.22);
+    background: linear-gradient(180deg, rgba(232,151,63,.34), rgba(232,151,63,.18));
+    color: #fff3e6; box-shadow: 0 0 26px rgba(232,151,63,.22);
   }
 
   .auth-alt {
@@ -177,7 +177,7 @@
     transition: background .16s, color .16s;
   }
   .navbtn:hover:not(:disabled) { background: rgba(255,255,255,.04); color: var(--text); }
-  .navbtn.on { background: rgba(63,167,160,.1); color: var(--accent); }
+  .navbtn.on { background: rgba(232,151,63,.1); color: var(--accent); }
   .navbtn:disabled { color: #363c47; }
   .navbtn .dot {
     width: 6px; height: 6px; border-radius: 50%;
@@ -199,8 +199,8 @@
   .avatar {
     width: 34px; height: 34px; flex: none; border-radius: 8px;
     display: grid; place-items: center;
-    background: linear-gradient(140deg, rgba(63,167,160,.3), rgba(63,167,160,.08));
-    border: 1px solid rgba(63,167,160,.35);
+    background: linear-gradient(140deg, rgba(232,151,63,.3), rgba(232,151,63,.08));
+    border: 1px solid rgba(232,151,63,.35);
     color: #d6f2ef; font-size: 14px; font-weight: 600;
   }
   .avatar.guest {
@@ -219,6 +219,10 @@
     border: 1px solid rgba(194,69,63,.45); border-radius: 4px;
     padding: 2px 6px; background: rgba(194,69,63,.09);
   }
+  /* A plain author `display` declaration beats the UA stylesheet's
+     [hidden]{display:none} regardless of specificity, so the hidden IDL
+     property toggled from JS did nothing without this. */
+  .badge-dev[hidden] { display: none; }
   .signout {
     width: 100%; margin-top: 11px; padding: 7px 0;
     background: transparent; border: 1px solid var(--line); border-radius: 7px;
@@ -263,20 +267,20 @@
   .hero-title {
     font-size: 34px; letter-spacing: .16em; text-transform: uppercase;
     color: #eef2f6; margin-bottom: 12px;
-    text-shadow: 0 0 34px rgba(63,167,160,.35);
+    text-shadow: 0 0 34px rgba(232,151,63,.35);
   }
   .hero-desc { font-size: 13px; line-height: 1.65; color: var(--muted); margin-bottom: 22px; }
 
   .playbtn {
     padding: 12px 34px;
-    background: linear-gradient(180deg, rgba(63,167,160,.26), rgba(63,167,160,.13));
-    border: 1px solid rgba(63,167,160,.55); border-radius: 9px;
+    background: linear-gradient(180deg, rgba(232,151,63,.26), rgba(232,151,63,.13));
+    border: 1px solid rgba(232,151,63,.55); border-radius: 9px;
     color: #d5f3f0; font-size: 11.5px; letter-spacing: .24em; text-transform: uppercase;
     transition: background .18s, box-shadow .18s, color .18s, transform .12s;
   }
   .playbtn:hover {
-    background: linear-gradient(180deg, rgba(63,167,160,.4), rgba(63,167,160,.2));
-    color: #f0fffd; box-shadow: 0 0 32px rgba(63,167,160,.28);
+    background: linear-gradient(180deg, rgba(232,151,63,.4), rgba(232,151,63,.2));
+    color: #fff3e6; box-shadow: 0 0 32px rgba(232,151,63,.28);
   }
   .playbtn:active { transform: translateY(1px); }
 
@@ -393,6 +397,40 @@
     filter: drop-shadow(0 0 8px rgba(216,178,63,.4));
   }
 
+  /* --------------------------------------------------------- leaderboard */
+
+  .lbgrid {
+    display: grid; gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    max-width: 1000px;
+  }
+  .lbcard {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 12px; padding: 16px 18px 8px;
+  }
+  .lbcard h3 {
+    margin: 0 0 4px; font-size: 13px; letter-spacing: .14em;
+    text-transform: uppercase; color: #e8ecf2;
+  }
+  .lbcard .lbsub {
+    font-size: 10px; letter-spacing: .08em; color: var(--dim);
+    margin-bottom: 12px; text-transform: uppercase;
+  }
+  .lbrow {
+    display: flex; align-items: center; gap: 10px;
+    padding: 7px 0; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.035);
+  }
+  .lbrow:last-child { border-bottom: none; }
+  .lbrow .rank {
+    width: 18px; flex: none; color: var(--dim); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .lbrow .rank.top { color: var(--accent); font-weight: 600; }
+  .lbrow .name { flex: 1; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lbrow .score {
+    color: var(--text); font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px;
+  }
+  .lbempty { padding: 10px 0 12px; font-size: 11.5px; color: var(--dim); }
+
   /* ------------------------------------------------------------- account */
 
   .acctgrid {
@@ -437,6 +475,20 @@
     filter: drop-shadow(0 0 14px rgba(240,180,41,.3));
   }
 
+  .art-drift {
+    background:
+      linear-gradient(180deg, rgba(59,42,85,.5), rgba(163,80,110,.28) 55%, rgba(232,151,63,.22)),
+      linear-gradient(180deg, #0a0d14, #06070a);
+  }
+  .art-drift::after {
+    content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 58px;
+    background:
+      linear-gradient(#e8973f, #e8973f) 0 50% / 100% 6px no-repeat,
+      repeating-linear-gradient(90deg, #eef1f6 0 10px, #1a1c22 10px 20px) 0 100% / 100% 8px no-repeat;
+    opacity: .9;
+    filter: drop-shadow(0 0 14px rgba(232,151,63,.3));
+  }
+
   /* ------------------------------------------------------------ downloads */
 
   .dlgrid {
@@ -448,7 +500,7 @@
     border-radius: 12px; padding: 20px;
     display: flex; flex-direction: column;
   }
-  .dlcard.primary { border-color: rgba(63,167,160,.3); }
+  .dlcard.primary { border-color: rgba(232,151,63,.3); }
   .dl-kicker {
     font-size: 9.5px; letter-spacing: .22em; text-transform: uppercase;
     color: var(--accent); margin-bottom: 10px;
@@ -462,15 +514,15 @@
 
   .btn-dl {
     display: block; width: 100%; padding: 12px 0; text-align: center;
-    background: linear-gradient(180deg, rgba(63,167,160,.24), rgba(63,167,160,.12));
-    border: 1px solid rgba(63,167,160,.5); border-radius: 9px;
+    background: linear-gradient(180deg, rgba(232,151,63,.24), rgba(232,151,63,.12));
+    border: 1px solid rgba(232,151,63,.5); border-radius: 9px;
     color: #d5f3f0; text-decoration: none;
     font-size: 11px; letter-spacing: .2em; text-transform: uppercase;
     transition: background .18s, box-shadow .18s, color .18s;
   }
   .btn-dl:hover {
-    background: linear-gradient(180deg, rgba(63,167,160,.38), rgba(63,167,160,.19));
-    color: #f0fffd; box-shadow: 0 0 28px rgba(63,167,160,.22);
+    background: linear-gradient(180deg, rgba(232,151,63,.38), rgba(232,151,63,.19));
+    color: #fff3e6; box-shadow: 0 0 28px rgba(232,151,63,.22);
   }
   .btn-dl.off {
     background: rgba(255,255,255,.03); border-color: var(--line);
@@ -568,6 +620,7 @@
 
     <nav class="side-nav">
       <button class="navbtn on" data-view="library"><span class="dot"></span>Library</button>
+      <button class="navbtn" data-view="leaderboard"><span class="dot"></span>Leaderboard</button>
       <button class="navbtn" data-view="downloads"><span class="dot"></span>Downloads</button>
       <button class="navbtn" data-view="account"><span class="dot"></span>Account</button>
       <button class="navbtn" disabled><span class="dot"></span>Store<span class="soon">Soon</span></button>
@@ -612,6 +665,16 @@
 
       <div class="grid-head">All titles</div>
       <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- --------------------------------------------------- leaderboard -->
+    <section class="view" id="view-leaderboard" hidden>
+      <div class="head">
+        <h1>Leaderboard</h1>
+        <p>Every signed-in run, ranked per game</p>
+      </div>
+
+      <div class="lbgrid" id="lbgrid"></div>
     </section>
 
     <!-- ----------------------------------------------------- downloads -->
@@ -816,6 +879,10 @@
     {
       id: 'sensfinder', title: 'Sens Finder', file: 'sensfinder.html',
       tag: 'Tool · Aim Training', art: 'art-sens'
+    },
+    {
+      id: 'novadrift', title: 'Nova Drift', file: 'novadrift.html',
+      tag: 'Racing · Arcade', art: 'art-drift'
     }
   ];
 
@@ -1109,7 +1176,7 @@
 
   // ================================================================== views
 
-  var VIEWS = ['library', 'downloads', 'account'];
+  var VIEWS = ['library', 'leaderboard', 'downloads', 'account'];
 
   function showView(name) {
     VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
@@ -1118,6 +1185,88 @@
     });
     if (name === 'account') buildAccount();
     if (name === 'downloads') buildDownloads();
+    if (name === 'leaderboard') buildLeaderboard();
+  }
+
+  // ------------------------------------------------------------ leaderboard
+  // Only games with a numeric result post to the shared board — Void Signal,
+  // Sens Finder and the "Soon" store slot have nothing to rank.
+
+  function lbFmtTime(ms) {
+    var m = Math.floor(ms / 60000);
+    var s = Math.floor((ms % 60000) / 1000);
+    var frac = Math.floor(ms % 1000);
+    return m + ':' + (s < 10 ? '0' : '') + s + '.' + (frac < 100 ? (frac < 10 ? '00' : '0') : '') + frac;
+  }
+
+  var LB_GAMES = [
+    { id: 'tetris', title: 'Tetris', fmt: function (row) { return String(row.score) + ' pts'; } },
+    { id: '2048', title: '2048', fmt: function (row) { return String(row.score) + ' pts'; } },
+    {
+      id: 'novadrift', title: 'Nova Drift',
+      fmt: function (row) {
+        // The server path nests extra fields under row.meta; the offline
+        // local-storage fallback flattens them onto the row directly.
+        var ms = (row.meta && row.meta.ms != null) ? row.meta.ms : (row.ms != null ? row.ms : null);
+        return ms != null ? lbFmtTime(ms) + ' lap' : String(row.score);
+      }
+    }
+  ];
+
+  function buildLeaderboard() {
+    var wrap = $('lbgrid');
+    wrap.innerHTML = '';
+
+    LB_GAMES.forEach(function (game) {
+      var card = document.createElement('div');
+      card.className = 'lbcard';
+
+      var h3 = document.createElement('h3');
+      h3.textContent = game.title;
+      var sub = document.createElement('div');
+      sub.className = 'lbsub';
+      sub.textContent = 'Loading…';
+      card.appendChild(h3);
+      card.appendChild(sub);
+
+      wrap.appendChild(card);
+
+      if (!N) { sub.textContent = 'Unavailable'; return; }
+
+      N.topScores(game.id, 10, false).then(function (res) {
+        sub.textContent = res.global ? 'All-time · World' : 'All-time · This device';
+
+        if (!res.rows.length) {
+          var empty = document.createElement('div');
+          empty.className = 'lbempty';
+          empty.textContent = 'No runs posted yet — be the first.';
+          card.appendChild(empty);
+          return;
+        }
+
+        res.rows.forEach(function (row, i) {
+          var r = document.createElement('div');
+          r.className = 'lbrow';
+
+          var rank = document.createElement('span');
+          rank.className = 'rank' + (i < 3 ? ' top' : '');
+          rank.textContent = '#' + (i + 1);
+
+          var name = document.createElement('span');
+          name.className = 'name';
+          name.textContent = row.name;
+
+          var score = document.createElement('span');
+          score.className = 'score';
+          score.textContent = game.fmt(row);
+
+          r.appendChild(rank);
+          r.appendChild(name);
+          r.appendChild(score);
+          card.appendChild(r);
+        });
+      });
+    });
   }
 
   Array.prototype.forEach.call(document.querySelectorAll('.navbtn'), function (b) {
@@ -1230,7 +1379,7 @@
       s.ph += dt * 1.6;
       if (s.y < -6) { s.y = h + 6; s.x = Math.random() * w; }
       var a = s.a * (0.6 + 0.4 * Math.sin(s.ph));
-      ctx.fillStyle = 'rgba(120,190,186,' + a.toFixed(3) + ')';
+      ctx.fillStyle = 'rgba(240,181,110,' + a.toFixed(3) + ')';
       ctx.beginPath();
       ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
       ctx.fill();

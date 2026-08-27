@@ -450,6 +450,7 @@
             name: r.username,
             score: r.score,
             won: !!(r.meta && r.meta.won),
+            meta: r.meta || {},
             at: Date.parse(r.created_at) || 0
           };
         })
