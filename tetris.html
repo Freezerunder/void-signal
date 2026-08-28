@@ -425,7 +425,8 @@
 
   const W = COLS * CELL;
   const H = ROWS * CELL;
-  const ctx = setup(document.getElementById('board'), W, H);
+  const boardCanvas = document.getElementById('board');
+  const ctx = setup(boardCanvas, W, H);
   const nextCtx = setup(document.getElementById('next'), 120, 96);
 
   const el = {
@@ -1170,6 +1171,66 @@
   document.getElementById('tb-hard').addEventListener('pointerdown', function (e) {
     e.preventDefault();
     if (state === 'playing') hardDrop();
+  });
+
+  // Swipe-on-the-board controls, alongside the touch button bar above:
+  // drag sideways to shift columns, drag down to soft-drop, flick down
+  // fast to hard-drop, tap in place to rotate.
+  let touch = null;
+
+  boardCanvas.addEventListener('pointerdown', function (e) {
+    if (state !== 'playing') { touch = null; return; }
+    boardCanvas.setPointerCapture(e.pointerId);
+    touch = {
+      id: e.pointerId,
+      startX: e.clientX, startY: e.clientY,
+      startTime: performance.now(),
+      lastCellX: 0,
+      rawMoved: false,
+      softDropping: false
+    };
+  });
+
+  boardCanvas.addEventListener('pointermove', function (e) {
+    if (!touch || touch.id !== e.pointerId || state !== 'playing') return;
+    const dx = e.clientX - touch.startX;
+    const dy = e.clientY - touch.startY;
+    if (Math.abs(dx) > 6 || Math.abs(dy) > 6) touch.rawMoved = true;
+
+    const cellPx = boardCanvas.getBoundingClientRect().width / COLS;
+    const cellX = Math.round(dx / cellPx);
+    if (cellX !== touch.lastCellX) {
+      let steps = cellX - touch.lastCellX;
+      const dir = steps > 0 ? 1 : -1;
+      steps = Math.abs(steps);
+      for (let i = 0; i < steps; i++) move(dir);
+      touch.lastCellX = cellX;
+    }
+
+    if (!touch.softDropping && dy > cellPx * 1.2) {
+      touch.softDropping = true;
+      softDrop = true;
+      dropTimer = Math.max(dropTimer, SOFT_DROP_MS);
+    }
+  });
+
+  function endBoardTouch(e) {
+    if (!touch || touch.id !== e.pointerId) return;
+    const dy = e.clientY - touch.startY;
+    const dt = performance.now() - touch.startTime;
+    if (touch.softDropping) softDrop = false;
+    if (state === 'playing') {
+      if (dy > 60 && dt < 220) hardDrop();
+      else if (!touch.rawMoved) rotate();
+    }
+    boardCanvas.releasePointerCapture(e.pointerId);
+    touch = null;
+  }
+
+  boardCanvas.addEventListener('pointerup', endBoardTouch);
+  boardCanvas.addEventListener('pointercancel', function (e) {
+    if (touch && touch.id === e.pointerId && touch.softDropping) softDrop = false;
+    touch = null;
   });
 
   el.overlay.addEventListener('click', function () {
