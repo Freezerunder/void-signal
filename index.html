@@ -437,8 +437,21 @@
     display: flex; gap: 18px; max-width: 900px;
     height: min(600px, 70vh);
   }
+  .chat-people-col {
+    width: 200px; flex: none;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .chat-newbtn {
+    flex: none; padding: 9px 10px;
+    border-radius: 10px; border: 1px dashed var(--line);
+    background: none; color: var(--dim); font-size: 12px; cursor: pointer;
+    text-align: center;
+  }
+  .chat-newbtn:hover { color: var(--accent); border-color: rgba(232,151,63,.4); }
+  .chat-newbtn:disabled { opacity: .4; cursor: default; }
+  .chat-newbtn:disabled:hover { color: var(--dim); border-color: var(--line); }
   .chat-people {
-    width: 200px; flex: none; overflow-y: auto;
+    width: 100%; flex: 1; min-height: 0; overflow-y: auto;
     background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
     padding: 8px;
   }
@@ -505,9 +518,43 @@
     max-width: 900px; margin-top: 10px; font-size: 10.5px; color: var(--dim);
   }
 
+  .chat-modal-backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.55);
+    display: flex; align-items: center; justify-content: center; z-index: 100;
+  }
+  .chat-modal-panel {
+    width: min(360px, 90vw); max-height: 70vh; display: flex; flex-direction: column;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden;
+  }
+  .chat-modal-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 16px; border-bottom: 1px solid var(--line); flex: none;
+  }
+  .chat-modal-head h3 { margin: 0; font-size: 13px; letter-spacing: .06em; color: var(--text); }
+  .chat-modal-close {
+    background: none; border: none; color: var(--dim); font-size: 20px; line-height: 1; cursor: pointer;
+    padding: 2px 4px;
+  }
+  .chat-modal-close:hover { color: var(--text); }
+  .chat-modal-search {
+    margin: 12px 16px 8px; padding: 9px 11px;
+    background: #090b0f; color: var(--text); border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; outline: none; flex: none;
+  }
+  .chat-modal-search:focus { border-color: rgba(232,151,63,.55); }
+  .chat-modal-list { overflow-y: auto; padding: 4px 8px 12px; flex: 1; }
+  .chat-modal-item {
+    display: block; width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px;
+    background: none; border: none; color: var(--text); font-size: 13px; cursor: pointer;
+  }
+  .chat-modal-item:hover { background: rgba(255,255,255,.06); }
+  .chat-modal-item .real { color: var(--dim); font-size: 10.5px; margin-top: 2px; }
+  .chat-modal-empty { padding: 18px 10px; color: var(--dim); font-size: 12px; text-align: center; }
+
   @media (max-width: 720px) {
     .chatwrap { flex-direction: column; height: auto; }
-    .chat-people { width: 100%; height: 130px; }
+    .chat-people-col { width: 100%; height: 160px; }
     .chat-thread { height: 60vh; }
   }
 
@@ -828,7 +875,10 @@
       </div>
 
       <div class="chatwrap">
-        <div class="chat-people" id="chat-people"></div>
+        <div class="chat-people-col">
+          <button type="button" class="chat-newbtn" id="chat-newbtn">+ New chat</button>
+          <div class="chat-people" id="chat-people"></div>
+        </div>
         <div class="chat-thread">
           <div class="chat-thread-head">
             <div id="chat-title">Everyone</div>
@@ -843,6 +893,17 @@
       </div>
       <div class="chat-ttl-note">Messages disappear 24 hours after they're sent.</div>
     </section>
+
+    <div class="chat-modal-backdrop" id="chat-newmodal" hidden>
+      <div class="chat-modal-panel">
+        <div class="chat-modal-head">
+          <h3>New chat</h3>
+          <button type="button" class="chat-modal-close" id="chat-newclose" aria-label="Close">&times;</button>
+        </div>
+        <input class="chat-modal-search" id="chat-newsearch" type="text" placeholder="Search by name…" autocomplete="off">
+        <div class="chat-modal-list" id="chat-newlist"></div>
+      </div>
+    </div>
 
     <!-- ----------------------------------------------------- downloads -->
     <section class="view" id="view-downloads" hidden>
@@ -1588,6 +1649,7 @@
     var guest = chatGuest();
     $('chat-input').disabled = guest;
     $('chat-send').disabled = guest;
+    $('chat-newbtn').disabled = guest;
     $('chat-input').placeholder = guest ? 'Sign in to chat' : 'Message…';
 
     updateChatHead();
@@ -1639,6 +1701,76 @@
       chatSending = false;
       $('chat-send').disabled = false;
     });
+  });
+
+  // "New chat": a searchable picker over the same chatPeople list the
+  // sidebar already shows in full — worth little in a tiny friend group,
+  // but it's what keeps starting a specific DM workable once that list is
+  // long enough that scrolling it isn't.
+
+  function renderChatNewList(query) {
+    var wrap = $('chat-newlist');
+    wrap.innerHTML = '';
+    var q = query.trim().toLowerCase();
+    var matches = !q ? chatPeople : chatPeople.filter(function (p) {
+      return p.username.toLowerCase().indexOf(q) !== -1
+        || (p.realName && p.realName.toLowerCase().indexOf(q) !== -1);
+    });
+
+    if (!matches.length) {
+      var empty = document.createElement('div');
+      empty.className = 'chat-modal-empty';
+      empty.textContent = chatPeople.length
+        ? 'No one matches “' + query.trim() + '”.'
+        : 'No one else has an account yet.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    matches.forEach(function (p) {
+      var item = document.createElement('button');
+      item.type = 'button';
+      item.className = 'chat-modal-item';
+
+      var name = document.createElement('div');
+      name.textContent = p.username;
+      item.appendChild(name);
+
+      if (p.realName) {
+        var real = document.createElement('div');
+        real.className = 'real';
+        real.textContent = p.realName;
+        item.appendChild(real);
+      }
+
+      item.addEventListener('click', function () {
+        selectChat(p.id);
+        chatCloseNewModal();
+      });
+      wrap.appendChild(item);
+    });
+  }
+
+  function chatOpenNewModal() {
+    if (chatGuest()) return;
+    $('chat-newsearch').value = '';
+    renderChatNewList('');
+    $('chat-newmodal').hidden = false;
+    $('chat-newsearch').focus();
+  }
+
+  function chatCloseNewModal() {
+    $('chat-newmodal').hidden = true;
+  }
+
+  $('chat-newbtn').addEventListener('click', chatOpenNewModal);
+  $('chat-newclose').addEventListener('click', chatCloseNewModal);
+  $('chat-newsearch').addEventListener('input', function () { renderChatNewList(this.value); });
+  $('chat-newmodal').addEventListener('click', function (e) {
+    if (e.target === $('chat-newmodal')) chatCloseNewModal();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && !$('chat-newmodal').hidden) chatCloseNewModal();
   });
 
   function buildAccount() {
