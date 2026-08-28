@@ -192,7 +192,9 @@
 
   function setProfile(profile) {
     if (!auth) return;
-    auth.user = profile ? { id: profile.id, username: profile.username, isDev: !!profile.isDev } : null;
+    auth.user = profile
+      ? { id: profile.id, username: profile.username, isDev: !!profile.isDev, realName: profile.realName || '' }
+      : null;
     writeJSON(AUTH_KEY, auth);
   }
 
@@ -213,7 +215,7 @@
         refreshToken: session.refresh_token,
         expiresIn: session.expires_in
       });
-      setProfile(keep ? { id: keep.id, username: keep.username, isDev: keep.isDev } : null);
+      setProfile(keep ? { id: keep.id, username: keep.username, isDev: keep.isDev, realName: keep.realName } : null);
       return auth;
     }).catch(function (err) {
       // An expired or revoked refresh token means the session is genuinely
@@ -227,7 +229,7 @@
     return fsRequest('/profiles/' + encodeURIComponent(userId), { token: token })
       .then(function (doc) {
         var data = fsDoc(doc.fields);
-        return { id: userId, username: data.username, isDev: !!data.isDev };
+        return { id: userId, username: data.username, isDev: !!data.isDev, realName: data.realName || '' };
       })
       .catch(function (err) {
         if (err.status === 404) return null;
@@ -235,13 +237,17 @@
       });
   }
 
-  function signUp(username, password) {
+  function signUp(username, password, realName) {
     lastError = null;
     if (!/^[A-Za-z0-9 _-]{3,16}$/.test(username)) {
       return Promise.reject(new Error('Username: 3–16 characters, letters/numbers/space/_/- only.'));
     }
     if (!password || password.length < 6) {
       return Promise.reject(new Error('Password must be at least 6 characters.'));
+    }
+    var cleanRealName = (realName || '').trim();
+    if (!cleanRealName || cleanRealName.length > 60) {
+      return Promise.reject(new Error('Enter your real name (up to 60 characters).'));
     }
 
     var uid, cleanName = username.trim(), session, devFlag;
@@ -273,11 +279,14 @@
       .then(function () {
         return fsRequest('/profiles?documentId=' + encodeURIComponent(uid), {
           method: 'POST', token: session.idToken,
-          body: { fields: fsFields({ username: cleanName, isDev: devFlag, createdAt: new Date().toISOString() }) }
+          body: { fields: fsFields({
+            username: cleanName, isDev: devFlag, realName: cleanRealName,
+            createdAt: new Date().toISOString()
+          }) }
         });
       })
       .then(function () {
-        setProfile({ id: uid, username: cleanName, isDev: devFlag });
+        setProfile({ id: uid, username: cleanName, isDev: devFlag, realName: cleanRealName });
         return currentUser();
       })
       .catch(function (err) {

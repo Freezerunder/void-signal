@@ -587,6 +587,10 @@
         <label for="fname">Username</label>
         <input id="fname" type="text" maxlength="16" autocomplete="username" spellcheck="false">
       </div>
+      <div class="field" id="realnamefield" hidden>
+        <label for="frealname">Real name</label>
+        <input id="frealname" type="text" maxlength="60" autocomplete="name" spellcheck="false">
+      </div>
       <div class="field">
         <label for="fpass">Password</label>
         <input id="fpass" type="password" maxlength="64" autocomplete="current-password">
@@ -594,12 +598,6 @@
       <div class="field" id="confirmfield" hidden>
         <label for="fpass2">Confirm password</label>
         <input id="fpass2" type="password" maxlength="64" autocomplete="new-password">
-      </div>
-
-      <div class="auth-note" id="firstnote" hidden>
-        Your name and scores are kept on the server, so they follow you to any
-        browser or device. The <b>first account ever created</b> is the owner
-        account and the only one that gets <b>DEV ACCESS</b>.
       </div>
 
       <div class="auth-err mono" id="autherr"></div>
@@ -732,6 +730,7 @@
         <div class="infocard">
           <h3>Profile</h3>
           <div class="inforow"><span>Username</span><b id="i-name">—</b></div>
+          <div class="inforow"><span>Real name</span><b id="i-realname">—</b></div>
           <div class="inforow"><span>Account</span><b id="i-created">—</b></div>
           <div class="inforow"><span>Dev access</span><b id="i-dev">—</b></div>
           <div class="inforow"><span>Leaderboard</span><b id="i-count">—</b></div>
@@ -798,10 +797,10 @@
     $('tabsignin').classList.toggle('on', !creating);
     $('tabcreate').classList.toggle('on', creating);
     $('confirmfield').hidden = !creating;
+    $('realnamefield').hidden = !creating;
     $('authsubmit').textContent = creating ? 'Create account' : 'Sign in';
     $('authtagline').textContent = creating ? 'Claim a name on the leaderboard' : 'Sign in to your library';
     $('fpass').setAttribute('autocomplete', creating ? 'new-password' : 'current-password');
-    $('firstnote').hidden = !creating;
     $('autherr').textContent = '';
   }
 
@@ -835,9 +834,11 @@
     if (!pass) return fail('Enter a password.');
 
     if (mode === 'create') {
+      var realName = $('frealname').value.trim();
+      if (!realName) return fail('Enter your real name.');
       if (pass !== $('fpass2').value) return fail('Passwords do not match.');
       working('Creating…');
-      N.signUp(name, pass).then(onSignedIn).catch(function (err) { fail(err.message); });
+      N.signUp(name, pass, realName).then(onSignedIn).catch(function (err) { fail(err.message); });
     } else {
       working('Signing in…');
       N.signIn(name, pass).then(onSignedIn).catch(function (err) { fail(err.message); });
@@ -855,6 +856,7 @@
     $('shell').hidden = true;
     $('authwrap').hidden = false;
     $('fname').value = '';
+    $('frealname').value = '';
     $('fpass').value = '';
     $('fpass2').value = '';
     setMode('signin');
@@ -1277,6 +1279,7 @@
     var guest = !session || session.guest;
     $('acctsub2').textContent = guest ? 'Guest session' : 'Signed in';
     $('i-name').textContent = guest ? 'Guest' : session.username;
+    $('i-realname').textContent = guest ? '—' : (session.realName || '—');
     $('i-created').textContent = guest ? 'Not signed in' : 'Server account';
 
     var dev = $('i-dev');

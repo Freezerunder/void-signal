@@ -30,6 +30,9 @@ service cloud.firestore {
         && request.auth.uid == uid
         && request.resource.data.username is string
         && request.resource.data.username.matches('^[A-Za-z0-9 _-]{3,16}$')
+        && request.resource.data.realName is string
+        && request.resource.data.realName.size() >= 1
+        && request.resource.data.realName.size() <= 60
         && request.resource.data.isDev is bool
         // The owner rule, enforced where it cannot be bypassed: isDev may
         // only be true if this uid is the one that actually won the
