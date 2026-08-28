@@ -5,29 +5,39 @@
  * across the launcher and every game, and four copies of an auth client is
  * four places for them to drift apart. Loaded as a classic script (not a
  * module) so it still works over file:// inside the Electron build, where
- * module loading is blocked by CORS.
+ * module loading is blocked by CORS — which is also why this talks to
+ * Firebase's plain REST endpoints instead of the Firebase JS SDK (the SDK is
+ * ESM-first and assumes a bundler).
  *
- * The publishable key below is meant to be public — it is the browser half of
- * a Supabase project, and every rule that matters is enforced server-side by
- * row-level security and triggers (see supabase/schema.sql). It is not a
- * secret and does not need hiding.
+ * Backed by Firebase (Identity Toolkit for auth, Firestore for data) rather
+ * than Supabase: a free-tier Supabase project auto-pauses after a week of no
+ * traffic, which meant logins failing until someone noticed and clicked
+ * Restore in a dashboard. Firebase's Spark (free) plan has no such pause.
  *
- * Everything degrades: if the network is down, the project is paused, or the
- * schema has not been applied yet, calls fail softly and callers fall back to
- * the local-only path they used before this existed.
+ * The apiKey below is meant to be public — same deal as any client-side
+ * Firebase config — it identifies the project, it does not authorize
+ * anything by itself. Every rule that matters is enforced server-side by
+ * Firestore Security Rules (see firestore.rules), not by this file.
+ *
+ * Everything degrades: if the network is down or the project is
+ * unreachable, calls fail softly and callers fall back to the local-only
+ * path they used before this existed.
  */
 (function () {
   'use strict';
 
   var CONFIG = {
-    url: 'https://dznnweyjhbsqomykiznq.supabase.co',
-    key: 'sb_publishable_Q3GpGkQalSB4dYXlocEbEg_8ObGhaK7'
+    apiKey: 'AIzaSyBrQT4Bp5YtERmZkHScb6MLCVeNIqklccI',
+    projectId: 'nova-games-980db'
   };
 
-  // Accounts are username + password, as they always were here. Supabase Auth
-  // is email-based, so the username is mapped onto a synthetic address on a
-  // domain that receives no mail. This is why "Confirm email" has to be off in
-  // the project's auth settings — there is no inbox to confirm from.
+  var IDENTITY_URL = 'https://identitytoolkit.googleapis.com/v1';
+  var TOKEN_URL = 'https://securetoken.googleapis.com/v1/token';
+  var FIRESTORE_URL = 'https://firestore.googleapis.com/v1/projects/' + CONFIG.projectId + '/databases/(default)/documents';
+
+  // Accounts are username + password, as they always were here. Firebase
+  // Auth is email-based, so the username is mapped onto a synthetic address
+  // on a domain that receives no mail.
   var EMAIL_DOMAIN = 'players.novagames.app';
 
   var AUTH_KEY = 'nova.auth.v1';
@@ -68,63 +78,112 @@
   // -------------------------------------------------------------- fetch
 
   function isOffline(err) {
-    // A TypeError from fetch is the network itself failing, as opposed to the
-    // server answering with an error we can show the player.
+    // A TypeError from fetch is the network itself failing, as opposed to
+    // the server answering with an error we can show the player.
     return err instanceof TypeError;
   }
 
-  function request(path, options) {
-    options = options || {};
-    var headers = {
-      'apikey': CONFIG.key,
-      'Content-Type': 'application/json'
-    };
-    // PostgREST wants a bearer token on every call; unauthenticated reads use
-    // the publishable key as their own bearer.
-    var token = (options.token === undefined)
-      ? (auth && auth.access_token ? auth.access_token : CONFIG.key)
-      : options.token;
-    headers['Authorization'] = 'Bearer ' + token;
-
-    if (options.headers) {
-      Object.keys(options.headers).forEach(function (k) { headers[k] = options.headers[k]; });
-    }
-
-    return fetch(CONFIG.url + path, {
-      method: options.method || 'GET',
-      headers: headers,
-      body: options.body ? JSON.stringify(options.body) : undefined
-    }).then(function (res) {
-      return res.text().then(function (text) {
-        var data = null;
-        try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
-        if (!res.ok) {
-          var msg = (data && (data.msg || data.message || data.error_description || data.error)) ||
-                    ('Request failed (' + res.status + ')');
-          var err = new Error(msg);
-          err.status = res.status;
-          err.data = data;
-          throw err;
-        }
-        return data;
-      });
+  function parseResponse(res) {
+    return res.text().then(function (text) {
+      var data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+      if (!res.ok) {
+        var err = new Error((data && data.error && data.error.message) || ('http ' + res.status));
+        err.status = res.status;
+        err.data = data;
+        throw err;
+      }
+      return data;
     });
   }
 
-  // --------------------------------------------------------------- auth
+  // Identity Toolkit wants the API key as a query param and JSON bodies.
+  function idRequest(method, body) {
+    return fetch(IDENTITY_URL + '/accounts:' + method + '?key=' + CONFIG.apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    }).then(parseResponse);
+  }
+
+  // The token-refresh endpoint is a different host and wants form encoding
+  // with snake_case fields — one of Google's few REST inconsistencies here.
+  function tokenRequest(refreshToken) {
+    return fetch(TOKEN_URL + '?key=' + CONFIG.apiKey, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(refreshToken)
+    }).then(parseResponse);
+  }
+
+  function fsRequest(path, options) {
+    options = options || {};
+    var headers = { 'Content-Type': 'application/json' };
+    var token = options.token !== undefined ? options.token : (auth && auth.access_token);
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    return fetch(FIRESTORE_URL + path, {
+      method: options.method || 'GET',
+      headers: headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined
+    }).then(parseResponse);
+  }
+
+  // ------------------------------------------------------ firestore values
+  // Firestore's REST API wants every field wrapped in a {typeValue: x}
+  // envelope rather than plain JSON. These two functions are the only place
+  // that has to know that.
+
+  function fsValue(v) {
+    if (v === null || v === undefined) return { nullValue: null };
+    if (typeof v === 'boolean') return { booleanValue: v };
+    if (typeof v === 'number') return Number.isInteger(v) ? { integerValue: String(v) } : { doubleValue: v };
+    if (typeof v === 'string') return { stringValue: v };
+    if (Array.isArray(v)) return { arrayValue: { values: v.map(fsValue) } };
+    if (typeof v === 'object') return { mapValue: { fields: fsFields(v) } };
+    return { nullValue: null };
+  }
+
+  function fsFields(obj) {
+    var fields = {};
+    Object.keys(obj || {}).forEach(function (k) { fields[k] = fsValue(obj[k]); });
+    return fields;
+  }
+
+  function fsParse(v) {
+    if (!v) return null;
+    var key = Object.keys(v)[0];
+    switch (key) {
+      case 'stringValue': return v.stringValue;
+      case 'booleanValue': return v.booleanValue;
+      case 'integerValue': return parseInt(v.integerValue, 10);
+      case 'doubleValue': return v.doubleValue;
+      case 'timestampValue': return v.timestampValue;
+      case 'nullValue': return null;
+      case 'arrayValue': return (v.arrayValue.values || []).map(fsParse);
+      case 'mapValue': return fsDoc(v.mapValue.fields || {});
+      default: return null;
+    }
+  }
+
+  function fsDoc(fields) {
+    var out = {};
+    Object.keys(fields || {}).forEach(function (k) { out[k] = fsParse(fields[k]); });
+    return out;
+  }
 
   function emailFor(username) {
     return username.trim().toLowerCase().replace(/\s+/g, '.') + '@' + EMAIL_DOMAIN;
   }
 
   function storeSession(session) {
-    if (!session || !session.access_token) return null;
+    // session shape from signUp/signIn: { idToken, refreshToken, expiresIn, localId }
+    if (!session || !session.idToken) return null;
     auth = {
-      access_token: session.access_token,
-      refresh_token: session.refresh_token,
-      // A minute of slack so a request never leaves with a token that expires
-      // while it is in flight.
-      expires_at: Date.now() + ((session.expires_in || 3600) - 60) * 1000,
+      access_token: session.idToken,
+      refresh_token: session.refreshToken,
+      // A minute of slack so a request never leaves with a token that
+      // expires while it is in flight.
+      expires_at: Date.now() + ((parseInt(session.expiresIn, 10) || 3600) - 60) * 1000,
       user: auth && auth.user ? auth.user : null
     };
     writeJSON(AUTH_KEY, auth);
@@ -133,9 +192,7 @@
 
   function setProfile(profile) {
     if (!auth) return;
-    auth.user = profile ? {
-      id: profile.id, username: profile.username, isDev: !!profile.is_dev
-    } : null;
+    auth.user = profile ? { id: profile.id, username: profile.username, isDev: !!profile.isDev } : null;
     writeJSON(AUTH_KEY, auth);
   }
 
@@ -150,11 +207,13 @@
     if (!auth.refresh_token) { clearSession(); return Promise.resolve(null); }
 
     var keep = auth.user;
-    return request('/auth/v1/token?grant_type=refresh_token', {
-      method: 'POST', token: CONFIG.key, body: { refresh_token: auth.refresh_token }
-    }).then(function (session) {
-      storeSession(session);
-      setProfile(keep ? { id: keep.id, username: keep.username, is_dev: keep.isDev } : null);
+    return tokenRequest(auth.refresh_token).then(function (session) {
+      storeSession({
+        idToken: session.id_token,
+        refreshToken: session.refresh_token,
+        expiresIn: session.expires_in
+      });
+      setProfile(keep ? { id: keep.id, username: keep.username, isDev: keep.isDev } : null);
       return auth;
     }).catch(function (err) {
       // An expired or revoked refresh token means the session is genuinely
@@ -164,9 +223,16 @@
     });
   }
 
-  function fetchProfile(userId) {
-    return request('/rest/v1/profiles?select=id,username,is_dev&id=eq.' + encodeURIComponent(userId))
-      .then(function (rows) { return (rows && rows[0]) || null; });
+  function fetchProfile(userId, token) {
+    return fsRequest('/profiles/' + encodeURIComponent(userId), { token: token })
+      .then(function (doc) {
+        var data = fsDoc(doc.fields);
+        return { id: userId, username: data.username, isDev: !!data.isDev };
+      })
+      .catch(function (err) {
+        if (err.status === 404) return null;
+        throw err;
+      });
   }
 
   function signUp(username, password) {
@@ -178,68 +244,87 @@
       return Promise.reject(new Error('Password must be at least 6 characters.'));
     }
 
-    return request('/auth/v1/signup', {
-      method: 'POST', token: CONFIG.key,
-      body: { email: emailFor(username), password: password }
-    }).then(function (result) {
-      // With "Confirm email" left on, signup returns a user but no session,
-      // and there is no inbox behind the synthetic address to confirm from.
-      if (!result || !result.access_token) {
-        throw new Error('Sign-ups need email confirmation turned off in the Supabase project.');
-      }
-      storeSession(result);
-      var id = result.user && result.user.id;
-      return request('/rest/v1/profiles', {
-        method: 'POST',
-        headers: { 'Prefer': 'return=representation' },
-        body: { id: id, username: username.trim() }
+    var uid, cleanName = username.trim(), session, devFlag;
+
+    return idRequest('signUp', { email: emailFor(username), password: password, returnSecureToken: true })
+      .then(function (result) {
+        session = result;
+        uid = result.localId;
+        storeSession(session);
+
+        // The owner rule, enforced where it cannot be bypassed: whoever's
+        // create of this one document lands first holds dev access forever,
+        // and nobody after them does. Firestore document creation is atomic
+        // per-document, so this race has exactly one winner regardless of
+        // how many people sign up at once.
+        return fsRequest('/meta?documentId=owner', {
+          method: 'POST', token: session.idToken,
+          body: { fields: fsFields({ uid: uid }) }
+        }).then(function () { devFlag = true; })
+          .catch(function (err) {
+            // The rule embeds its own !exists() check (it has to, to reason
+            // about who's first), so losing the race is a rule-level 403,
+            // not the storage-level 409 a plain id collision would be. Both
+            // mean "someone else already claimed it" here.
+            if (err.status !== 403 && err.status !== 409) throw err;
+            devFlag = false;
+          });
+      })
+      .then(function () {
+        return fsRequest('/profiles?documentId=' + encodeURIComponent(uid), {
+          method: 'POST', token: session.idToken,
+          body: { fields: fsFields({ username: cleanName, isDev: devFlag, createdAt: new Date().toISOString() }) }
+        });
+      })
+      .then(function () {
+        setProfile({ id: uid, username: cleanName, isDev: devFlag });
+        return currentUser();
+      })
+      .catch(function (err) {
+        // The profile document is what makes an account real; without it
+        // there is a half-made auth user that can never be completed under
+        // the same name.
+        if (auth && !auth.user) clearSession();
+        throw translate(err);
       });
-    }).then(function (rows) {
-      var profile = rows && rows[0];
-      setProfile(profile);
-      return currentUser();
-    }).catch(function (err) {
-      // The profile row is what makes an account real; without it there is a
-      // half-made auth user that can never be completed under the same name.
-      if (auth && !auth.user) clearSession();
-      throw translate(err);
-    });
   }
 
   function signIn(username, password) {
     lastError = null;
-    return request('/auth/v1/token?grant_type=password', {
-      method: 'POST', token: CONFIG.key,
-      body: { email: emailFor(username), password: password }
-    }).then(function (session) {
-      storeSession(session);
-      return fetchProfile(session.user.id);
-    }).then(function (profile) {
-      if (!profile) throw new Error('That account has no profile — sign up again to finish it.');
-      setProfile(profile);
-      return currentUser();
-    }).catch(function (err) {
-      clearSession();
-      throw translate(err);
-    });
+    var session;
+    return idRequest('signInWithPassword', { email: emailFor(username), password: password, returnSecureToken: true })
+      .then(function (result) {
+        session = result;
+        storeSession(session);
+        return fetchProfile(session.localId, session.idToken);
+      })
+      .then(function (profile) {
+        if (!profile) throw new Error('That account has no profile — sign up again to finish it.');
+        setProfile(profile);
+        return currentUser();
+      })
+      .catch(function (err) {
+        clearSession();
+        throw translate(err);
+      });
   }
 
   function translate(err) {
     if (isOffline(err)) return new Error('Cannot reach the server. Check your connection.');
     var m = String(err.message || '');
-    if (/Invalid login credentials/i.test(m)) return new Error('Wrong username or password.');
-    if (/already registered|already been registered/i.test(m)) return new Error('That name is taken.');
-    if (/duplicate key|profiles_username_key/i.test(m)) return new Error('That name is taken.');
-    if (/Could not find the table/i.test(m)) return new Error('The database schema has not been set up yet.');
+    if (/EMAIL_NOT_FOUND|INVALID_PASSWORD|INVALID_LOGIN_CREDENTIALS/.test(m)) return new Error('Wrong username or password.');
+    if (/EMAIL_EXISTS/.test(m)) return new Error('That name is taken.');
+    if (/WEAK_PASSWORD/.test(m)) return new Error('Password must be at least 6 characters.');
+    if (/TOO_MANY_ATTEMPTS_TRY_LATER/.test(m)) return new Error('Too many attempts — wait a bit and try again.');
+    if (/PERMISSION_DENIED|insufficient permissions/i.test(m)) return new Error('That could not be completed — try again.');
     return err;
   }
 
   function signOut() {
-    var token = auth && auth.access_token;
+    // Nothing server-side to revoke for password auth over this REST
+    // surface — signing out is just forgetting the local tokens.
     clearSession();
-    if (!token) return Promise.resolve();
-    return request('/auth/v1/logout', { method: 'POST', token: token })
-      .catch(function () { /* the local session is already gone either way */ });
+    return Promise.resolve();
   }
 
   function currentUser() {
@@ -256,9 +341,9 @@
       if (!live) return null;
       var id = live.user && live.user.id;
       if (!id) return null;
-      return fetchProfile(id).then(function (profile) {
-        // Offline, the cached profile stands. Online with no profile row, the
-        // account is gone and the session with it.
+      return fetchProfile(id, live.access_token).then(function (profile) {
+        // Offline, the cached profile stands. Online with no profile
+        // document, the account is gone and the session with it.
         if (!profile) { clearSession(); return null; }
         setProfile(profile);
         return currentUser();
@@ -274,9 +359,9 @@
   // derived from the date and the game name and nothing else — no server
   // round-trip, no shared state, just the same arithmetic everywhere.
   //
-  // The date is UTC to match the server's current_date, which is what the
-  // insert trigger stamps onto a daily run. Local dates would put a player in
-  // Sydney on a different board from the one their score gets filed under.
+  // The date is UTC so it matches the integer day stamped onto a daily run
+  // (see submitScore below). Local dates would put a player in Sydney on a
+  // different board from the one their score gets filed under.
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
@@ -318,6 +403,12 @@
     return next - d.getTime();
   }
 
+  // The integer day used server-side to stamp and rate-limit a daily run —
+  // see the firestore.rules comment on /scores for why this exists.
+  function dayNumber(now) {
+    return Math.floor((now || Date.now()) / 86400000);
+  }
+
   // Today's daily attempt for one game, or null if there isn't one. A record
   // from a previous day is not today's, so the reset needs no cleanup pass —
   // yesterday's entry simply stops matching and gets overwritten on the next
@@ -328,9 +419,10 @@
     return (rec && rec.day === dayStamp()) ? rec : null;
   }
 
-  // `pending` means the run has not reached the server and a retry could still
-  // land it. It is the difference between "you have played today" and "your
-  // run is on the board", which are not the same thing on a flaky connection.
+  // `pending` means the run has not reached the server and a retry could
+  // still land it. It is the difference between "you have played today" and
+  // "your run is on the board", which are not the same thing on a flaky
+  // connection.
   function recordDaily(game, score, pending, meta, userId) {
     var db = readJSON(DAILY_KEY) || {};
     db[game] = {
@@ -341,9 +433,9 @@
     return db[game];
   }
 
-  // Marks today's attempt as settled: no retry is possible or needed. The run
-  // already on record wins over the one just played, because replaying the
-  // daily does not replace the run that actually reached the board.
+  // Marks today's attempt as settled: no retry is possible or needed. The
+  // run already on record wins over the one just played, because replaying
+  // the daily does not replace the run that actually reached the board.
   function settleDaily(game, score, meta, userId) {
     var prior = dailyRecord(game);
     if (prior && !prior.pending) return prior;
@@ -351,10 +443,10 @@
                        prior ? prior.meta : meta, userId);
   }
 
-  // Retries a daily run whose POST failed earlier. Deliberately scoped to the
-  // account that recorded it: signing in on a shared machine must never post
-  // somebody else's attempt under your name, and a run played signed-out was
-  // never eligible for the board in the first place.
+  // Retries a daily run whose POST failed earlier. Deliberately scoped to
+  // the account that recorded it: signing in on a shared machine must never
+  // post somebody else's attempt under your name, and a run played
+  // signed-out was never eligible for the board in the first place.
   function flushDaily(game) {
     var rec = dailyRecord(game);
     var user = currentUser();
@@ -391,13 +483,7 @@
       at: Date.now()
     };
     if (meta) Object.keys(meta).forEach(function (k) { entry[k] = meta[k]; });
-    // A daily attempt belongs to the shared board, so it is kept out of the
-    // local free-play list rather than double-counted there — but it is still
-    // written down, under its own key, because a dropped connection must not
-    // silently swallow the single run a player gets today.
-    // Replaying today's daily must not reopen a settled record. Overwriting it
-    // as pending would tell the player they still have a ranked run left, and
-    // would later flush the replay score instead of the one on the board.
+
     if (daily) {
       var prior = dailyRecord(game);
       if (!prior || prior.pending) {
@@ -410,22 +496,30 @@
     if (!user) return Promise.resolve({ posted: false, reason: 'guest' });
 
     return refreshIfNeeded().then(function () {
-      return request('/rest/v1/scores', {
-        method: 'POST',
-        body: {
-          user_id: user.id, game: game, score: score,
-          meta: meta || {}, daily: !!daily
-        }
-      });
+      var day = daily ? dayNumber() : null;
+      var body = {
+        userId: user.id, username: user.username, game: game,
+        score: score, meta: meta || {}, daily: !!daily, day: day,
+        createdAt: new Date().toISOString()
+      };
+      // A daily run's document id doubles as the one-per-day lock: Firestore
+      // create-only semantics mean a second attempt the same day collides
+      // with the first and fails, mirroring the unique index this used to
+      // be. A free-play run has no such limit, so its id is left to
+      // Firestore to generate.
+      var path = daily
+        ? '/scores?documentId=' + encodeURIComponent(user.id + '_' + game + '_' + day)
+        : '/scores';
+      return fsRequest(path, { method: 'POST', token: auth.access_token, body: { fields: fsFields(body) } });
     }).then(function () {
       if (daily) settleDaily(game, score, meta, user.id);
       return { posted: true };
     }).catch(function (err) {
-      // 23505 is the one-daily-run-per-day unique index doing its job, which
-      // is a rule rather than a failure. The server already holds today's run,
-      // so the local record is settled too — leaving it pending would offer a
-      // retry that can never succeed.
-      if (err.data && err.data.code === '23505') {
+      // ALREADY_EXISTS (409) is the one-daily-run-per-day lock doing its
+      // job, which is a rule rather than a failure. The server already
+      // holds today's run, so the local record is settled too — leaving it
+      // pending would offer a retry that can never succeed.
+      if (err.status === 409) {
         if (daily) settleDaily(game, score, meta, user.id);
         return { posted: false, reason: 'already-played' };
       }
@@ -437,35 +531,52 @@
   // unreachable, so the panel is never simply empty.
   function topScores(game, limit, daily) {
     limit = limit || 10;
-    var query = '/rest/v1/scores?select=username,score,meta,created_at' +
-                '&game=eq.' + encodeURIComponent(game) +
-                (daily ? '&daily=is.true&day=eq.' + dayStamp() : '&daily=is.false') +
-                '&order=score.desc,created_at.asc&limit=' + limit;
 
-    return request(query).then(function (rows) {
+    var filters = [
+      { fieldFilter: { field: { fieldPath: 'game' }, op: 'EQUAL', value: { stringValue: game } } }
+    ];
+    filters.push(daily
+      ? { fieldFilter: { field: { fieldPath: 'day' }, op: 'EQUAL', value: { integerValue: String(dayNumber()) } } }
+      : { fieldFilter: { field: { fieldPath: 'daily' }, op: 'EQUAL', value: { booleanValue: false } } });
+
+    var body = {
+      structuredQuery: {
+        from: [{ collectionId: 'scores' }],
+        where: { compositeFilter: { op: 'AND', filters: filters } },
+        orderBy: [
+          { field: { fieldPath: 'score' }, direction: 'DESCENDING' },
+          { field: { fieldPath: 'createdAt' }, direction: 'ASCENDING' }
+        ],
+        limit: limit
+      }
+    };
+
+    return fsRequest(':runQuery', { method: 'POST', body: body }).then(function (rows) {
+      var docs = (rows || []).filter(function (r) { return r && r.document; });
       return {
         global: true,
-        rows: (rows || []).map(function (r) {
+        rows: docs.map(function (r) {
+          var data = fsDoc(r.document.fields);
           return {
-            name: r.username,
-            score: r.score,
-            won: !!(r.meta && r.meta.won),
-            meta: r.meta || {},
-            at: Date.parse(r.created_at) || 0
+            name: data.username,
+            score: data.score,
+            won: !!(data.meta && data.meta.won),
+            meta: data.meta || {},
+            at: Date.parse(data.createdAt) || 0
           };
         })
       };
     }).catch(function () {
-      // A daily board has no local equivalent — it is the shared race or it is
-      // nothing, and showing this device's free-play scores under a "Daily"
-      // heading would be a lie.
+      // A daily board has no local equivalent — it is the shared race or it
+      // is nothing, and showing this device's free-play scores under a
+      // "Daily" heading would be a lie.
       if (daily) return { global: false, daily: true, rows: [] };
       return { global: false, rows: localScores(game).slice(0, limit) };
     });
   }
 
   window.Nova = {
-    configured: !!(CONFIG.url && CONFIG.key),
+    configured: !!(CONFIG.apiKey && CONFIG.projectId),
     isDesktop: IS_DESKTOP,
     restore: restore,
     signUp: signUp,

@@ -1,0 +1,103 @@
+// Nova Games — Firestore Security Rules.
+//
+// Paste this whole file into the Firebase console: Firestore Database ->
+// Rules tab -> replace the contents -> Publish. Re-pasting it is harmless.
+//
+// The site ships a public apiKey in source, which is what that key is for —
+// every rule that actually matters is enforced here, not by the client.
+// Two things follow from that and are worth stating plainly:
+//
+//   * Anything a rule allows, ANY visitor can do with nothing but the public
+//     apiKey and curl. So: scores and profiles are readable by all, writable
+//     only by the signed-in owner, and never updatable or deletable by
+//     anyone.
+//   * Anything the client sends that must not be forged (a display name, a
+//     dev flag) is checked against a trusted source here rather than taken
+//     on faith — Firestore rules can only allow-or-deny a write, they can't
+//     rewrite it the way a Postgres trigger could, so forged values are
+//     rejected outright instead of silently corrected.
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------- profiles
+
+    match /profiles/{uid} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.username is string
+        && request.resource.data.username.matches('^[A-Za-z0-9 _-]{3,16}$')
+        && request.resource.data.isDev is bool
+        // The owner rule, enforced where it cannot be bypassed: isDev may
+        // only be true if this uid is the one that actually won the
+        // meta/owner race below.
+        && request.resource.data.isDev == (
+             exists(/databases/$(database)/documents/meta/owner) &&
+             get(/databases/$(database)/documents/meta/owner).data.uid == request.auth.uid
+           );
+
+      // Insert-once: with an update policy in place, a signed-in user could
+      // simply patch isDev to true and hand themselves dev access.
+      allow update, delete: if false;
+    }
+
+    // -------------------------------------------------------------- meta
+
+    match /meta/owner {
+      allow read: if true;
+
+      // Firestore document creation is atomic per-document, so whichever
+      // signed-up user's create lands first is the only one that can ever
+      // succeed here — that is what makes this race safe with no
+      // transaction or Cloud Function required.
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && !exists(/databases/$(database)/documents/meta/owner);
+
+      allow update, delete: if false;
+    }
+
+    // ------------------------------------------------------------ scores
+
+    match /scores/{scoreId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        // The display name is checked against the profile on file rather
+        // than rewritten, so a hand-rolled request can neither post under
+        // someone else's name nor invent one.
+        && request.resource.data.username ==
+             get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username
+        && request.resource.data.game is string
+        && request.resource.data.game.matches('^[a-z0-9_-]{1,32}$')
+        && request.resource.data.score is int
+        && request.resource.data.score > 0
+        && request.resource.data.daily is bool
+        && (
+             (
+               // A daily run is stamped with the server's own UTC day
+               // number (nobody can backdate a run onto an easier board or
+               // post to tomorrow early), and its document id must encode
+               // that exact (uid, game, day) triple. Firestore rejects a
+               // second create at the same id, which is what turns this
+               // into "one daily run per player per game per day" with no
+               // unique index to maintain.
+               request.resource.data.daily == true &&
+               request.resource.data.day == int(request.time.toMillis() / 86400000) &&
+               scoreId == request.auth.uid + '_' + request.resource.data.game + '_' + string(request.resource.data.day)
+             ) ||
+             (
+               // Free play carries no day and is not rate-limited.
+               request.resource.data.daily == false &&
+               request.resource.data.day == null
+             )
+           );
+
+      allow update, delete: if false;
+    }
+  }
+}
