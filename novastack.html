@@ -1,0 +1,518 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova Stack</title>
+<style>
+  :root {
+    --bg: #12141b;
+    --panel: #191c24;
+    --line: #2b303d;
+    --text: #eceff4;
+    --muted: #8b93a5;
+    --accent: #6fd6c4;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%; margin: 0; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none; user-select: none;
+  }
+
+  #stage { position: fixed; inset: 0; display: block; cursor: pointer; }
+
+  .backlink {
+    position: fixed; top: 16px; left: 18px; z-index: 20;
+    color: var(--muted); text-decoration: none;
+    font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px;
+    background: rgba(14,16,21,.6);
+    transition: color .16s, border-color .16s;
+  }
+  .backlink:hover { color: var(--accent); border-color: var(--accent); }
+
+  .score {
+    position: fixed; top: 22px; left: 0; right: 0; z-index: 15;
+    text-align: center; pointer-events: none;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .score .num { font-size: 48px; font-weight: 700; text-shadow: 0 2px 14px rgba(0,0,0,.4); }
+  .score .best { font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.75); margin-top: 2px; }
+
+  .perfect {
+    position: fixed; left: 50%; z-index: 16; pointer-events: none;
+    transform: translateX(-50%);
+    font-size: 13px; letter-spacing: .2em; text-transform: uppercase;
+    color: #fff; text-shadow: 0 2px 10px rgba(0,0,0,.5);
+    opacity: 0;
+  }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10,11,15,.72);
+    text-align: center;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay h1 {
+    margin: 0 0 6px; font-size: 26px; letter-spacing: .18em; text-transform: uppercase;
+    color: #f2f4f8;
+  }
+  .overlay .sub { margin: 0 0 20px; font-size: 12.5px; color: var(--muted); letter-spacing: .04em; }
+  .overlay .go {
+    font-size: 11.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid rgba(111,214,196,.5); border-radius: 9px; padding: 12px 30px;
+    background: linear-gradient(180deg, rgba(111,214,196,.18), rgba(111,214,196,.08));
+    margin-bottom: 22px;
+  }
+  .board {
+    width: min(280px, 80vw);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .board h3 {
+    margin: 0 0 10px; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+  .row {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.04);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .rank { color: var(--muted); width: 20px; text-align: left; }
+  .row .name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note { margin-top: 12px; font-size: 10.5px; color: var(--muted); max-width: 280px; }
+</style>
+</head>
+<body>
+
+<a class="backlink" href="index.html">← Library</a>
+
+<canvas id="stage"></canvas>
+
+<div class="score">
+  <div class="num" id="scorenum">0</div>
+  <div class="best" id="bestline">Best —</div>
+</div>
+
+<div class="perfect" id="perfectfx">Perfect!</div>
+
+<div class="overlay" id="start">
+  <h1>Nova Stack</h1>
+  <div class="sub">Click, tap, or press space to drop the block. Line it up or lose the overhang.</div>
+  <button class="go" id="gobtn">Press to Start</button>
+</div>
+
+<div class="overlay" id="gameover" hidden>
+  <h1>Missed</h1>
+  <div class="sub" id="finalscore">Stacked 0</div>
+  <button class="go" id="retrybtn">Try Again</button>
+  <div class="board">
+    <h3 id="boardlabel">Leaderboard</h3>
+    <div id="boardrows"></div>
+  </div>
+  <div class="note" id="signinnote"></div>
+</div>
+
+<script src="nova.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var GAME_ID = 'novastack';
+  var BEST_KEY = 'nova.novastack.best';
+
+  // ============================================================== geometry
+
+  var BASE_SIZE = 240;
+  var LAYER_H = 46;
+  var ISO_X = 0.86;
+  var ISO_Y = 0.5;
+  var PERFECT_TOLERANCE = 6;
+  var AMPLITUDE = 320;
+
+  var MOVE_SPEED_START = 220;
+  var MOVE_SPEED_STEP = 1.045;
+  var MOVE_SPEED_MAX = 640;
+
+  // ================================================================= canvas
+
+  var canvas = document.getElementById('stage');
+  var ctx = canvas.getContext('2d');
+  var WIDTH = 0, HEIGHT = 0, DPR = 1;
+
+  function resize() {
+    DPR = Math.min(window.devicePixelRatio || 1, 2);
+    WIDTH = window.innerWidth;
+    HEIGHT = window.innerHeight;
+    canvas.width = Math.floor(WIDTH * DPR);
+    canvas.height = Math.floor(HEIGHT * DPR);
+    canvas.style.width = WIDTH + 'px';
+    canvas.style.height = HEIGHT + 'px';
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function $(id) { return document.getElementById(id); }
+
+  function project(x, z, y) {
+    return {
+      x: (x - z) * ISO_X,
+      y: (x + z) * ISO_Y - y
+    };
+  }
+
+  // ================================================================ colors
+
+  function layerColor(index) {
+    var hue = (200 + index * 11) % 360;
+    return {
+      top: 'hsl(' + hue + ', 68%, 62%)',
+      right: 'hsl(' + hue + ', 68%, 46%)',
+      front: 'hsl(' + hue + ', 68%, 54%)'
+    };
+  }
+
+  // ================================================================== state
+
+  var stack, moving, debris, camera, cameraTarget, score, best, running, over;
+
+  function loadBest() {
+    try { var v = localStorage.getItem(BEST_KEY); return v ? parseInt(v, 10) : 0; }
+    catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {}
+  }
+
+  best = loadBest();
+  $('bestline').textContent = 'Best ' + best;
+
+  function newMoving(axis, w, d, cx, cz, speed) {
+    return {
+      axis: axis, w: w, d: d,
+      // The axis not being moved on stays locked to the layer below; the
+      // moving axis starts off past one edge of the screen and sweeps.
+      x: axis === 'x' ? -AMPLITUDE : cx,
+      z: axis === 'z' ? -AMPLITUDE : cz,
+      lockedX: cx, lockedZ: cz,
+      dir: 1, speed: speed
+    };
+  }
+
+  function resetGame() {
+    stack = [{ x: 0, z: 0, w: BASE_SIZE, d: BASE_SIZE, color: layerColor(0) }];
+    moving = newMoving('x', BASE_SIZE, BASE_SIZE, 0, 0, MOVE_SPEED_START);
+    debris = [];
+    camera = 0;
+    cameraTarget = 0;
+    score = 0;
+    over = false;
+    $('scorenum').textContent = '0';
+  }
+
+  resetGame();
+  running = false;
+
+  // =============================================================== physics
+
+  function update(dt) {
+    if (!running || over) {
+      updateDebris(dt);
+      return;
+    }
+
+    if (moving.axis === 'x') {
+      moving.x += moving.dir * moving.speed * dt;
+      if (moving.x > AMPLITUDE) { moving.x = AMPLITUDE; moving.dir = -1; }
+      if (moving.x < -AMPLITUDE) { moving.x = -AMPLITUDE; moving.dir = 1; }
+    } else {
+      moving.z += moving.dir * moving.speed * dt;
+      if (moving.z > AMPLITUDE) { moving.z = AMPLITUDE; moving.dir = -1; }
+      if (moving.z < -AMPLITUDE) { moving.z = -AMPLITUDE; moving.dir = 1; }
+    }
+
+    cameraTarget = Math.max(0, (stack.length - 5) * LAYER_H);
+    camera += (cameraTarget - camera) * Math.min(1, dt * 6);
+
+    updateDebris(dt);
+  }
+
+  function updateDebris(dt) {
+    for (var i = debris.length - 1; i >= 0; i--) {
+      var d = debris[i];
+      d.vy += 900 * dt;
+      d.fall += d.vy * dt;
+      d.rot += d.vrot * dt;
+      d.age += dt;
+      if (d.age > 1.4) debris.splice(i, 1);
+    }
+  }
+
+  function flashPerfect() {
+    var el = $('perfectfx');
+    el.style.top = (HEIGHT * 0.32) + 'px';
+    el.style.transition = 'none';
+    el.style.opacity = '1';
+    el.style.transform = 'translateX(-50%) translateY(0)';
+    requestAnimationFrame(function () {
+      el.style.transition = 'opacity .6s ease, transform .6s ease';
+      el.style.opacity = '0';
+      el.style.transform = 'translateX(-50%) translateY(-24px)';
+    });
+  }
+
+  function drop() {
+    if (!running) { startGame(); return; }
+    if (over) return;
+
+    var prev = stack[stack.length - 1];
+    var axis = moving.axis;
+    var size = axis === 'x' ? moving.w : moving.d;
+    var prevCenter = axis === 'x' ? prev.x : prev.z;
+    var prevSize = axis === 'x' ? prev.w : prev.d;
+    var movingCenter = axis === 'x' ? moving.x : moving.z;
+
+    var loLo = movingCenter - size / 2, loHi = movingCenter + size / 2;
+    var hiLo = prevCenter - prevSize / 2, hiHi = prevCenter + prevSize / 2;
+    var overlapLo = Math.max(loLo, hiLo);
+    var overlapHi = Math.min(loHi, hiHi);
+    var overlap = overlapHi - overlapLo;
+
+    if (overlap <= 2) {
+      endGame();
+      spawnFullMissDebris(axis, movingCenter, size, prev);
+      return;
+    }
+
+    var perfect = Math.abs(prevSize - overlap) <= PERFECT_TOLERANCE;
+    var newSize = perfect ? prevSize : overlap;
+    var newCenter = perfect ? prevCenter : (overlapLo + overlapHi) / 2;
+
+    // Whatever didn't overlap falls away as debris.
+    if (!perfect) {
+      if (loLo < hiLo) spawnDebris(axis, loLo, hiLo, prev, movingCenter < prevCenter ? -1 : 1);
+      if (loHi > hiHi) spawnDebris(axis, hiHi, loHi, prev, movingCenter < prevCenter ? -1 : 1);
+    }
+
+    var layer = {
+      x: axis === 'x' ? newCenter : prev.x,
+      z: axis === 'z' ? newCenter : prev.z,
+      w: axis === 'x' ? newSize : prev.w,
+      d: axis === 'z' ? newSize : prev.d,
+      color: layerColor(stack.length)
+    };
+    stack.push(layer);
+    score++;
+    $('scorenum').textContent = String(score);
+    if (perfect) flashPerfect();
+
+    var nextAxis = axis === 'x' ? 'z' : 'x';
+    var nextSpeed = Math.min(MOVE_SPEED_MAX, moving.speed * MOVE_SPEED_STEP);
+    moving = newMoving(nextAxis, layer.w, layer.d, layer.x, layer.z, nextSpeed);
+    moving.dir = Math.random() < 0.5 ? 1 : -1;
+    if (nextAxis === 'x') moving.x = moving.dir > 0 ? -AMPLITUDE : AMPLITUDE;
+    else moving.z = moving.dir > 0 ? -AMPLITUDE : AMPLITUDE;
+  }
+
+  function spawnDebris(axis, lo, hi, prev, dir) {
+    var mid = (lo + hi) / 2;
+    var size = hi - lo;
+    if (size <= 0.5) return;
+    debris.push({
+      axis: axis,
+      x: axis === 'x' ? mid : prev.x,
+      z: axis === 'z' ? mid : prev.z,
+      w: axis === 'x' ? size : prev.w,
+      d: axis === 'z' ? size : prev.d,
+      y: stack.length * LAYER_H,
+      color: layerColor(stack.length),
+      fall: 0, vy: 60, rot: 0, vrot: dir * 2.2, age: 0
+    });
+  }
+
+  function spawnFullMissDebris(axis, center, size, prev) {
+    debris.push({
+      axis: axis,
+      x: axis === 'x' ? center : prev.x,
+      z: axis === 'z' ? center : prev.z,
+      w: axis === 'x' ? size : prev.w,
+      d: axis === 'z' ? size : prev.d,
+      y: stack.length * LAYER_H,
+      color: layerColor(stack.length),
+      fall: 0, vy: 40, rot: 0, vrot: (Math.random() < 0.5 ? -1 : 1) * 2.6, age: 0
+    });
+  }
+
+  // ================================================================ render
+
+  function drawCuboid(cx, cz, w, d, y0, y1, color, alpha, extraX, extraY) {
+    extraX = extraX || 0; extraY = extraY || 0;
+    var xN = cx - w / 2, xP = cx + w / 2;
+    var zN = cz - d / 2, zP = cz + d / 2;
+
+    function p(x, z, y) {
+      var pr = project(x, z, y);
+      return [pr.x + extraX, pr.y + extraY];
+    }
+
+    ctx.globalAlpha = alpha != null ? alpha : 1;
+
+    // top
+    var top = [p(xN, zN, y1), p(xP, zN, y1), p(xP, zP, y1), p(xN, zP, y1)];
+    poly(top, color.top);
+
+    // right face (x = xP)
+    var right = [p(xP, zN, y1), p(xP, zP, y1), p(xP, zP, y0), p(xP, zN, y0)];
+    poly(right, color.right);
+
+    // front face (z = zP)
+    var front = [p(xN, zP, y1), p(xP, zP, y1), p(xP, zP, y0), p(xN, zP, y0)];
+    poly(front, color.front);
+
+    ctx.globalAlpha = 1;
+  }
+
+  function poly(pts, fill) {
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawBackground() {
+    var topIndex = stack.length;
+    var hue = (200 + topIndex * 11) % 360;
+    var grd = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    grd.addColorStop(0, 'hsl(' + hue + ', 46%, 20%)');
+    grd.addColorStop(1, 'hsl(' + ((hue + 30) % 360) + ', 40%, 10%)');
+    ctx.fillStyle = grd;
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+  }
+
+  function render() {
+    drawBackground();
+
+    var originX = WIDTH / 2;
+    var originY = HEIGHT * 0.62 + camera;
+
+    var n, layer;
+    for (n = 0; n < stack.length; n++) {
+      layer = stack[n];
+      var y0 = n * LAYER_H, y1 = y0 + LAYER_H;
+      drawCuboid(layer.x, layer.z, layer.w, layer.d, y0, y1, layer.color, 1, originX, originY);
+    }
+
+    if (running && !over) {
+      var y0m = stack.length * LAYER_H, y1m = y0m + LAYER_H;
+      var mcolor = layerColor(stack.length);
+      var cx = moving.axis === 'x' ? moving.x : moving.lockedX;
+      var cz = moving.axis === 'z' ? moving.z : moving.lockedZ;
+      drawCuboid(cx, cz, moving.w, moving.d, y0m, y1m, mcolor, 1, originX, originY);
+    }
+
+    for (n = 0; n < debris.length; n++) {
+      var d = debris[n];
+      var a = Math.max(0, 1 - d.age / 1.4);
+      drawCuboid(d.x, d.z, d.w, d.d, d.y, d.y + LAYER_H, d.color, a, originX, originY + d.fall);
+    }
+  }
+
+  // ================================================================== loop
+
+  var last = 0;
+  function frame(now) {
+    if (!last) last = now;
+    var dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // =============================================================== flow
+
+  function startGame() {
+    $('start').hidden = true;
+    $('gameover').hidden = true;
+    resetGame();
+    running = true;
+  }
+
+  function endGame() {
+    over = true;
+    running = false;
+    if (score > best) { best = score; saveBest(best); }
+    $('bestline').textContent = 'Best ' + best;
+    $('finalscore').textContent = 'Stacked ' + score;
+    setTimeout(showGameOver, 550);
+    postScore();
+  }
+
+  function showGameOver() {
+    $('gameover').hidden = false;
+  }
+
+  canvas.addEventListener('pointerdown', function () { drop(); });
+  window.addEventListener('keydown', function (e) {
+    if (e.code === 'Space' || e.key === 'Enter') { e.preventDefault(); drop(); }
+    if (e.key.toLowerCase() === 'r' && over) startGame();
+  });
+  $('gobtn').addEventListener('click', startGame);
+  $('retrybtn').addEventListener('click', startGame);
+
+  // ------------------------------------------------------------- leaderboard
+
+  function refreshBoard() {
+    var rowsEl = $('boardrows');
+    rowsEl.innerHTML = '<div class="row"><span class="name">Loading…</span></div>';
+    if (!window.Nova) { rowsEl.innerHTML = ''; return; }
+    window.Nova.topScores(GAME_ID, 5, false).then(function (res) {
+      $('boardlabel').textContent = res.global ? 'Leaderboard · World' : 'Leaderboard · This device';
+      rowsEl.innerHTML = '';
+      if (!res.rows.length) {
+        rowsEl.innerHTML = '<div class="row"><span class="name">No runs yet — be the first.</span></div>';
+        return;
+      }
+      res.rows.forEach(function (row, i) {
+        var r = document.createElement('div');
+        r.className = 'row';
+        r.innerHTML = '<span class="rank">#' + (i + 1) + '</span><span class="name"></span><span></span>';
+        r.querySelector('.name').textContent = row.name;
+        r.lastElementChild.textContent = row.score;
+        rowsEl.appendChild(r);
+      });
+    });
+  }
+
+  function postScore() {
+    if (score <= 0) { refreshBoard(); return; }
+    var user = window.Nova && window.Nova.user();
+    $('signinnote').textContent = user ? '' : 'Sign in from the library to be ranked.';
+    if (!window.Nova) return;
+    window.Nova.submitScore(GAME_ID, score, {}, false).then(refreshBoard);
+  }
+
+  refreshBoard();
+  if (window.Nova) window.Nova.restore().then(refreshBoard).catch(function () {});
+
+  var backlink = document.querySelector('.backlink');
+  if (backlink && window.opener) {
+    backlink.addEventListener('click', function (e) {
+      e.preventDefault();
+      window.close();
+    });
+  }
+})();
+</script>
+</body>
+</html>

@@ -489,6 +489,25 @@
     filter: drop-shadow(0 0 14px rgba(232,151,63,.3));
   }
 
+  .art-stack {
+    background:
+      linear-gradient(135deg, rgba(111,214,196,.18), transparent 55%),
+      radial-gradient(ellipse 90% 70% at 50% 115%, rgba(111,214,196,.2), transparent 62%),
+      linear-gradient(180deg, #0a1210, #06070a);
+  }
+  .art-stack::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 76px; height: 86px;
+    background:
+      linear-gradient(#83e6d6, #83e6d6) 8px 0 / 52px 18px no-repeat,
+      linear-gradient(#6fd6c4, #6fd6c4) 0 22px / 76px 18px no-repeat,
+      linear-gradient(#49b39f, #49b39f) 12px 44px / 46px 18px no-repeat,
+      linear-gradient(#2a6a5f, #2a6a5f) 18px 66px / 34px 18px no-repeat;
+    opacity: .92;
+    filter: drop-shadow(0 0 14px rgba(111,214,196,.3));
+  }
+
   /* ------------------------------------------------------------ downloads */
 
   .dlgrid {
@@ -885,6 +904,10 @@
     {
       id: 'novadrift', title: 'Nova Drift', file: 'novadrift.html',
       tag: 'Racing · Arcade', art: 'art-drift'
+    },
+    {
+      id: 'novastack', title: 'Nova Stack', file: 'novastack.html',
+      tag: 'Arcade · Stacking', art: 'art-stack'
     }
   ];
 
@@ -1212,7 +1235,8 @@
         var ms = (row.meta && row.meta.ms != null) ? row.meta.ms : (row.ms != null ? row.ms : null);
         return ms != null ? lbFmtTime(ms) + ' lap' : String(row.score);
       }
-    }
+    },
+    { id: 'novastack', title: 'Nova Stack', fmt: function (row) { return String(row.score) + ' blocks'; } }
   ];
 
   function buildLeaderboard() {
