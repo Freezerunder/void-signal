@@ -508,6 +508,48 @@
     filter: drop-shadow(0 0 14px rgba(111,214,196,.3));
   }
 
+  .art-flap {
+    background:
+      linear-gradient(135deg, rgba(255,209,102,.18), transparent 55%),
+      radial-gradient(ellipse 90% 70% at 50% 115%, rgba(255,209,102,.18), transparent 62%),
+      linear-gradient(180deg, #14120a, #06070a);
+  }
+  .art-flap::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 90px; height: 80px;
+    background:
+      linear-gradient(#4a9d8f, #4a9d8f) 0 0 / 22px 30px no-repeat,
+      linear-gradient(#4a9d8f, #4a9d8f) 0 50px / 22px 30px no-repeat,
+      linear-gradient(#4a9d8f, #4a9d8f) 68px 0 / 22px 24px no-repeat,
+      linear-gradient(#4a9d8f, #4a9d8f) 68px 56px / 22px 24px no-repeat,
+      radial-gradient(circle at 45px 40px, #ffd166 0 13px, transparent 14px);
+    opacity: .92;
+    filter: drop-shadow(0 0 14px rgba(255,209,102,.3));
+  }
+
+  .art-snake {
+    background:
+      linear-gradient(135deg, rgba(127,216,88,.18), transparent 55%),
+      radial-gradient(ellipse 90% 70% at 50% 115%, rgba(127,216,88,.18), transparent 62%),
+      linear-gradient(180deg, #0e140a, #06070a);
+  }
+  .art-snake::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    transform: translate(-50%, -50%);
+    width: 84px; height: 84px;
+    background:
+      linear-gradient(#7fd858, #7fd858) 0 8px / 20px 20px no-repeat,
+      linear-gradient(#7fd858, #7fd858) 20px 8px / 20px 20px no-repeat,
+      linear-gradient(#6bc047, #6bc047) 20px 28px / 20px 20px no-repeat,
+      linear-gradient(#6bc047, #6bc047) 20px 48px / 20px 20px no-repeat,
+      linear-gradient(#57a838, #57a838) 40px 48px / 20px 20px no-repeat,
+      linear-gradient(#57a838, #57a838) 60px 48px / 20px 20px no-repeat,
+      radial-gradient(circle at 74px 58px, #ff6b6b 0 7px, transparent 8px);
+    opacity: .92;
+    filter: drop-shadow(0 0 14px rgba(127,216,88,.3));
+  }
+
   /* ------------------------------------------------------------ downloads */
 
   .dlgrid {
@@ -908,6 +950,14 @@
     {
       id: 'novastack', title: 'Nova Stack', file: 'novastack.html',
       tag: 'Arcade · Stacking', art: 'art-stack'
+    },
+    {
+      id: 'novaflap', title: 'Nova Flap', file: 'novaflap.html',
+      tag: 'Arcade · Reflex', art: 'art-flap'
+    },
+    {
+      id: 'novasnake', title: 'Nova Snake', file: 'novasnake.html',
+      tag: 'Arcade · Classic', art: 'art-snake'
     }
   ];
 
@@ -1236,7 +1286,9 @@
         return ms != null ? lbFmtTime(ms) + ' lap' : String(row.score);
       }
     },
-    { id: 'novastack', title: 'Nova Stack', fmt: function (row) { return String(row.score) + ' blocks'; } }
+    { id: 'novastack', title: 'Nova Stack', fmt: function (row) { return String(row.score) + ' blocks'; } },
+    { id: 'novaflap', title: 'Nova Flap', fmt: function (row) { return String(row.score) + ' pipes'; } },
+    { id: 'novasnake', title: 'Nova Snake', fmt: function (row) { return String(row.score) + ' eaten'; } }
   ];
 
   function buildLeaderboard() {

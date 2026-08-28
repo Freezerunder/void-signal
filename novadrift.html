@@ -148,7 +148,16 @@
   var DECEL = -MAX_SPEED / 5.5;
   var OFFROAD_DECEL = -MAX_SPEED / 2.6;
   var OFFROAD_LIMIT = MAX_SPEED / 3;
-  var CENTRIFUGAL = 0.3;
+
+  // Lateral handling: playerX now carries real velocity/inertia instead of
+  // steering moving it directly, so a correction feels like steering back
+  // rather than an instant snap.
+  var STEER_ACCEL = 5.5;         // units/sec^2 of lateral accel per key held
+  var STEER_DAMPING = 0.06;      // fraction of lateral speed left after 1s with no input
+  var MAX_STEER_SPEED = 3.0;     // clamp on lateral velocity
+  var CENTRIFUGAL_ACCEL = 3.2;   // curve pull scales with speed^2, like a real car
+  var WALL_LIMIT = 2.2;
+  var WALL_BOUNCE = 0.35;        // fraction of impact velocity reflected back
 
   var COLORS = {
     LIGHT:  { road: '#83879c', grass: '#2f8f6f', rumble: '#eef1f6', lane: true },
@@ -241,6 +250,7 @@
   var position = 0;     // world z along the track
   var speed = 0;
   var playerX = 0;       // -1..1 across the road, can exceed onto grass
+  var playerVX = 0;      // lateral velocity driving playerX
   var running = false;
   var keys = {};
 
@@ -268,6 +278,7 @@
     position = 0;
     speed = 0;
     playerX = 0;
+    playerVX = 0;
     lapCount = 1;
     lapStartTime = performance.now();
     $('lapnum').textContent = String(lapCount);
@@ -334,12 +345,24 @@
 
     var segment = findSegment(position);
     var speedPercent = speed / MAX_SPEED;
-    var dxSteer = dt * 2.4 * (0.3 + Math.abs(speedPercent) * 0.7);
 
-    if (isDown('a', 'arrowleft')) playerX -= dxSteer;
-    if (isDown('d', 'arrowright')) playerX += dxSteer;
+    var steerAccel = STEER_ACCEL * (0.35 + speedPercent * 0.65);
+    if (isDown('a', 'arrowleft')) playerVX -= steerAccel * dt;
+    if (isDown('d', 'arrowright')) playerVX += steerAccel * dt;
 
-    playerX -= dxSteer * speedPercent * segment.curve * CENTRIFUGAL;
+    // Centrifugal pull off a curve scales with speed squared, the way it
+    // does in a real car: barely noticeable at a crawl, and enough at full
+    // speed to throw you wide unless you brake into the corner or actively
+    // counter-steer against it.
+    playerVX -= segment.curve * speedPercent * speedPercent * CENTRIFUGAL_ACCEL * dt;
+
+    // Lateral grip bleeds velocity off on its own rather than snapping to
+    // zero the instant a key is released, which is what gave the old model
+    // its twitchy, no-momentum feel.
+    playerVX *= Math.pow(STEER_DAMPING, dt);
+    playerVX = Math.max(-MAX_STEER_SPEED, Math.min(MAX_STEER_SPEED, playerVX));
+
+    playerX += playerVX * dt;
 
     var offroad = playerX < -1 || playerX > 1;
 
@@ -351,9 +374,15 @@
 
     speed = Math.max(0, Math.min(MAX_SPEED, speed));
 
-    if (playerX < -2.2) playerX = -2.2;
-    if (playerX > 2.2) playerX = 2.2;
-    if (Math.abs(playerX) >= 2.2) speed *= 0.9; // grazing the outer wall
+    // Outer wall: an actual bounce off the impact instead of a sticky
+    // clamp — lose speed in proportion to how hard you hit it and get
+    // knocked back toward the road rather than pinned dead against it.
+    if (playerX > WALL_LIMIT || playerX < -WALL_LIMIT) {
+      var impact = Math.abs(playerVX);
+      playerX = playerX > 0 ? WALL_LIMIT : -WALL_LIMIT;
+      playerVX = -playerVX * WALL_BOUNCE;
+      speed *= Math.max(0.55, 1 - impact * 0.12);
+    }
 
     lastPos = position;
     position += speed * dt;

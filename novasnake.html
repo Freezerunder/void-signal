@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Nova Snake</title>
+<style>
+  :root {
+    --bg: #12141b;
+    --panel: #191c24;
+    --line: #2b303d;
+    --text: #eceff4;
+    --muted: #8b93a5;
+    --accent: #7fd858;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    height: 100%; margin: 0; overflow: hidden;
+    background: var(--bg); color: var(--text);
+    font-family: ui-sans-serif, -apple-system, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none; user-select: none;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  #stage { display: block; background: #0c0e12; border-radius: 10px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+
+  .backlink {
+    position: fixed; top: 16px; left: 18px; z-index: 20;
+    color: var(--muted); text-decoration: none;
+    font-size: 10.5px; letter-spacing: .18em; text-transform: uppercase;
+    padding: 7px 12px; border: 1px solid var(--line); border-radius: 7px;
+    background: rgba(14,16,21,.6);
+    transition: color .16s, border-color .16s;
+  }
+  .backlink:hover { color: var(--accent); border-color: var(--accent); }
+
+  .score {
+    position: fixed; top: 26px; left: 0; right: 0; z-index: 15;
+    text-align: center; pointer-events: none;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .score .num { font-size: 40px; font-weight: 700; text-shadow: 0 2px 14px rgba(0,0,0,.45); }
+
+  .overlay {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10,11,15,.72);
+    text-align: center;
+  }
+  .overlay[hidden] { display: none; }
+  .overlay h1 {
+    margin: 0 0 6px; font-size: 26px; letter-spacing: .18em; text-transform: uppercase;
+    color: #f2f4f8;
+  }
+  .overlay .sub { margin: 0 0 20px; font-size: 12.5px; color: var(--muted); letter-spacing: .04em; }
+  .overlay .go {
+    font-size: 11.5px; letter-spacing: .22em; text-transform: uppercase; color: var(--accent);
+    border: 1px solid rgba(127,216,88,.5); border-radius: 9px; padding: 12px 30px;
+    background: linear-gradient(180deg, rgba(127,216,88,.18), rgba(127,216,88,.08));
+    margin-bottom: 22px;
+  }
+  .board {
+    width: min(280px, 80vw);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .board h3 {
+    margin: 0 0 10px; font-size: 10.5px; letter-spacing: .2em; text-transform: uppercase; color: var(--muted); font-weight: 500;
+  }
+  .row {
+    display: flex; justify-content: space-between; gap: 10px;
+    padding: 5px 0; font-size: 12.5px; border-bottom: 1px solid rgba(255,255,255,.04);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  .row:last-child { border-bottom: none; }
+  .row .rank { color: var(--muted); width: 20px; text-align: left; }
+  .row .name { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .note { margin-top: 12px; font-size: 10.5px; color: var(--muted); max-width: 280px; }
+  .hint {
+    position: fixed; bottom: 18px; left: 0; right: 0; z-index: 15;
+    text-align: center; font-size: 10.5px; letter-spacing: .1em; color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<a class="backlink" href="index.html">← Library</a>
+
+<canvas id="stage"></canvas>
+
+<div class="score"><div class="num" id="scorenum">0</div></div>
+<div class="hint">WASD / arrows to turn</div>
+
+<div class="overlay" id="start">
+  <h1>Nova Snake</h1>
+  <div class="sub">Eat the dots, don't hit yourself or the wall.</div>
+  <button class="go" id="gobtn">Press to Start</button>
+</div>
+
+<div class="overlay" id="gameover" hidden>
+  <h1>Game Over</h1>
+  <div class="sub" id="finalscore">Score 0</div>
+  <button class="go" id="retrybtn">Try Again</button>
+  <div class="board">
+    <h3 id="boardlabel">Leaderboard</h3>
+    <div id="boardrows"></div>
+  </div>
+  <div class="note" id="signinnote"></div>
+</div>
+
+<script src="nova.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var GAME_ID = 'novasnake';
+  var BEST_KEY = 'nova.novasnake.best';
+
+  var CELLS = 18;
+  var TICK_START = 0.14;
+  var TICK_MIN = 0.065;
+  var TICK_STEP = 0.004;
+
+  var canvas = document.getElementById('stage');
+  var ctx = canvas.getContext('2d');
+  var CELL_PX = 0, BOARD_PX = 0;
+
+  function resize() {
+    var avail = Math.min(window.innerWidth, window.innerHeight) * 0.86;
+    CELL_PX = Math.floor(avail / CELLS);
+    BOARD_PX = CELL_PX * CELLS;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.floor(BOARD_PX * dpr);
+    canvas.height = Math.floor(BOARD_PX * dpr);
+    canvas.style.width = BOARD_PX + 'px';
+    canvas.style.height = BOARD_PX + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  function $(id) { return document.getElementById(id); }
+
+  function loadBest() {
+    try { var v = localStorage.getItem(BEST_KEY); return v ? parseInt(v, 10) : 0; }
+    catch (e) { return 0; }
+  }
+  function saveBest(v) {
+    try { localStorage.setItem(BEST_KEY, String(v)); } catch (e) {}
+  }
+  var best = loadBest();
+
+  // ================================================================== state
+
+  var snake, dir, nextDir, food, score, tickTimer, tickInterval, running, over;
+
+  function resetGame() {
+    var mid = Math.floor(CELLS / 2);
+    snake = [{ x: mid - 1, y: mid }, { x: mid - 2, y: mid }, { x: mid - 3, y: mid }];
+    dir = { x: 1, y: 0 };
+    nextDir = { x: 1, y: 0 };
+    score = 0;
+    tickTimer = 0;
+    tickInterval = TICK_START;
+    over = false;
+    $('scorenum').textContent = '0';
+    placeFood();
+  }
+
+  function placeFood() {
+    var cell;
+    var tries = 0;
+    do {
+      cell = { x: Math.floor(Math.random() * CELLS), y: Math.floor(Math.random() * CELLS) };
+      tries++;
+    } while (tries < 200 && snake.some(function (s) { return s.x === cell.x && s.y === cell.y; }));
+    food = cell;
+  }
+
+  resetGame();
+  running = false;
+
+  // =============================================================== physics
+
+  function setDir(x, y) {
+    // Block an instant 180-degree reversal into your own neck.
+    if (snake.length > 1 && x === -dir.x && y === -dir.y) return;
+    nextDir = { x: x, y: y };
+  }
+
+  function tick() {
+    dir = nextDir;
+    var head = snake[0];
+    var newHead = { x: head.x + dir.x, y: head.y + dir.y };
+
+    if (newHead.x < 0 || newHead.x >= CELLS || newHead.y < 0 || newHead.y >= CELLS) {
+      endGame();
+      return;
+    }
+
+    var ate = newHead.x === food.x && newHead.y === food.y;
+    // The tail vacates its cell this same tick unless the snake is growing,
+    // so it is excluded from the self-collision check — otherwise every
+    // move would register as running into your own tail.
+    var checkLen = ate ? snake.length : snake.length - 1;
+    for (var i = 0; i < checkLen; i++) {
+      if (snake[i].x === newHead.x && snake[i].y === newHead.y) {
+        endGame();
+        return;
+      }
+    }
+
+    snake.unshift(newHead);
+    if (ate) {
+      score++;
+      $('scorenum').textContent = String(score);
+      tickInterval = Math.max(TICK_MIN, tickInterval - TICK_STEP);
+      placeFood();
+    } else {
+      snake.pop();
+    }
+  }
+
+  function update(dt) {
+    if (!running || over) return;
+    tickTimer += dt;
+    while (tickTimer >= tickInterval) {
+      tickTimer -= tickInterval;
+      tick();
+      if (over) break;
+    }
+  }
+
+  // ================================================================ render
+
+  function render() {
+    ctx.fillStyle = '#0c0e12';
+    ctx.fillRect(0, 0, BOARD_PX, BOARD_PX);
+
+    ctx.fillStyle = 'rgba(255,255,255,.03)';
+    for (var gx = 0; gx < CELLS; gx += 2) {
+      for (var gy = 0; gy < CELLS; gy += 2) {
+        ctx.fillRect(gx * CELL_PX, gy * CELL_PX, CELL_PX, CELL_PX);
+      }
+    }
+
+    ctx.fillStyle = '#ff6b6b';
+    var fp = CELL_PX * 0.32;
+    ctx.beginPath();
+    ctx.arc(food.x * CELL_PX + CELL_PX / 2, food.y * CELL_PX + CELL_PX / 2, fp, 0, Math.PI * 2);
+    ctx.fill();
+
+    for (var i = snake.length - 1; i >= 0; i--) {
+      var s = snake[i];
+      var t = i / Math.max(1, snake.length - 1);
+      var lightness = 62 - t * 20;
+      ctx.fillStyle = 'hsl(102, 55%, ' + lightness + '%)';
+      var pad = i === 0 ? 1 : 2;
+      ctx.fillRect(s.x * CELL_PX + pad, s.y * CELL_PX + pad, CELL_PX - pad * 2, CELL_PX - pad * 2);
+    }
+  }
+
+  // ================================================================== loop
+
+  var last = 0;
+  function frame(now) {
+    if (!last) last = now;
+    var dt = Math.min((now - last) / 1000, 0.05);
+    last = now;
+    update(dt);
+    render();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  // =============================================================== flow
+
+  function startGame() {
+    $('start').hidden = true;
+    $('gameover').hidden = true;
+    resetGame();
+    running = true;
+  }
+
+  function endGame() {
+    over = true;
+    running = false;
+    if (score > best) { best = score; saveBest(best); }
+    $('finalscore').textContent = 'Score ' + score + (best > 0 ? ' · Best ' + best : '');
+    setTimeout(function () { $('gameover').hidden = false; }, 300);
+    postScore();
+  }
+
+  window.addEventListener('keydown', function (e) {
+    var k = e.key.toLowerCase();
+    if (['arrowup', 'arrowdown', 'arrowleft', 'arrowright', 'w', 'a', 's', 'd'].indexOf(k) !== -1) e.preventDefault();
+    if (!running) { if (k !== 'r') startGame(); return; }
+    if (over) { if (k === 'r') startGame(); return; }
+    if (k === 'arrowup' || k === 'w') setDir(0, -1);
+    else if (k === 'arrowdown' || k === 's') setDir(0, 1);
+    else if (k === 'arrowleft' || k === 'a') setDir(-1, 0);
+    else if (k === 'arrowright' || k === 'd') setDir(1, 0);
+  });
+
+  // Swipe controls for touch: track the drag vector on release.
+  var touchStart = null;
+  canvas.addEventListener('pointerdown', function (e) {
+    if (!running) { startGame(); return; }
+    touchStart = { x: e.clientX, y: e.clientY };
+  });
+  canvas.addEventListener('pointerup', function (e) {
+    if (!touchStart || over) { touchStart = null; return; }
+    var dx = e.clientX - touchStart.x, dy = e.clientY - touchStart.y;
+    touchStart = null;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 16) return;
+    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
+    else setDir(0, dy > 0 ? 1 : -1);
+  });
+
+  $('gobtn').addEventListener('click', startGame);
+  $('retrybtn').addEventListener('click', startGame);
+
+  // ------------------------------------------------------------- leaderboard
+
+  function refreshBoard() {
+    var rowsEl = $('boardrows');
+    rowsEl.innerHTML = '<div class="row"><span class="name">Loading…</span></div>';
+    if (!window.Nova) { rowsEl.innerHTML = ''; return; }
+    window.Nova.topScores(GAME_ID, 5, false).then(function (res) {
+      $('boardlabel').textContent = res.global ? 'Leaderboard · World' : 'Leaderboard · This device';
+      rowsEl.innerHTML = '';
+      if (!res.rows.length) {
+        rowsEl.innerHTML = '<div class="row"><span class="name">No runs yet — be the first.</span></div>';
+        return;
+      }
+      res.rows.forEach(function (row, i) {
+        var r = document.createElement('div');
+        r.className = 'row';
+        r.innerHTML = '<span class="rank">#' + (i + 1) + '</span><span class="name"></span><span></span>';
+        r.querySelector('.name').textContent = row.name;
+        r.lastElementChild.textContent = row.score;
+        rowsEl.appendChild(r);
+      });
+    });
+  }
+
+  function postScore() {
+    if (score <= 0) { refreshBoard(); return; }
+    var user = window.Nova && window.Nova.user();
+    $('signinnote').textContent = user ? '' : 'Sign in from the library to be ranked.';
+    if (!window.Nova) return;
+    window.Nova.submitScore(GAME_ID, score, {}, false).then(refreshBoard);
+  }
+
+  refreshBoard();
+  if (window.Nova) window.Nova.restore().then(refreshBoard).catch(function () {});
+
+  var backlink = document.querySelector('.backlink');
+  if (backlink && window.opener) {
+    backlink.addEventListener('click', function (e) {
+      e.preventDefault();
+      window.close();
+    });
+  }
+})();
+</script>
+</body>
+</html>
