@@ -65,11 +65,10 @@ service cloud.firestore {
 
     // ------------------------------------------------------------ scores
 
-    match /scores/{scoreId} {
-      allow read: if true;
-
-      allow create: if request.auth != null
-        && request.resource.data.userId == request.auth.uid
+    // Shared by create and update: everything except the doc-id and
+    // improvement checks, which differ between the two.
+    function validScoreFields() {
+      return request.resource.data.userId == request.auth.uid
         // The display name is checked against the profile on file rather
         // than rewritten, so a hand-rolled request can neither post under
         // someone else's name nor invent one.
@@ -79,7 +78,14 @@ service cloud.firestore {
         && request.resource.data.game.matches('^[a-z0-9_-]{1,32}$')
         && request.resource.data.score is int
         && request.resource.data.score > 0
-        && request.resource.data.daily is bool
+        && request.resource.data.daily is bool;
+    }
+
+    match /scores/{scoreId} {
+      allow read: if true;
+
+      allow create: if request.auth != null
+        && validScoreFields()
         && (
              (
                // A daily run is stamped with the server's own UTC day
@@ -94,13 +100,30 @@ service cloud.firestore {
                scoreId == request.auth.uid + '_' + request.resource.data.game + '_' + string(request.resource.data.day)
              ) ||
              (
-               // Free play carries no day and is not rate-limited.
+               // Free play carries one document per (player, game) — the id
+               // is the identity, so a run replaces the old one instead of
+               // piling up as its own row. That is also what keeps the
+               // leaderboard to one entry per player instead of their whole
+               // run history.
                request.resource.data.daily == false &&
-               request.resource.data.day == null
+               request.resource.data.day == null &&
+               scoreId == request.auth.uid + '_' + request.resource.data.game
              )
            );
 
-      allow update, delete: if false;
+      // Only a free-play personal best is ever updated, and only upward —
+      // a daily run's id already makes it one-shot, so there is nothing to
+      // update there, and this must never allow quietly rewriting a run to
+      // a worse score.
+      allow update: if request.auth != null
+        && validScoreFields()
+        && request.resource.data.daily == false
+        && request.resource.data.day == null
+        && resource.data.daily == false
+        && scoreId == request.auth.uid + '_' + request.resource.data.game
+        && request.resource.data.score > resource.data.score;
+
+      allow delete: if false;
     }
   }
 }

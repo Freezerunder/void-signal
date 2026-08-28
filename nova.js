@@ -505,33 +505,60 @@
     if (!user) return Promise.resolve({ posted: false, reason: 'guest' });
 
     return refreshIfNeeded().then(function () {
-      var day = daily ? dayNumber() : null;
       var body = {
         userId: user.id, username: user.username, game: game,
-        score: score, meta: meta || {}, daily: !!daily, day: day,
+        score: score, meta: meta || {}, daily: !!daily, day: daily ? dayNumber() : null,
         createdAt: new Date().toISOString()
       };
-      // A daily run's document id doubles as the one-per-day lock: Firestore
-      // create-only semantics mean a second attempt the same day collides
-      // with the first and fails, mirroring the unique index this used to
-      // be. A free-play run has no such limit, so its id is left to
-      // Firestore to generate.
-      var path = daily
-        ? '/scores?documentId=' + encodeURIComponent(user.id + '_' + game + '_' + day)
-        : '/scores';
-      return fsRequest(path, { method: 'POST', token: auth.access_token, body: { fields: fsFields(body) } });
-    }).then(function () {
-      if (daily) settleDaily(game, score, meta, user.id);
+
+      if (daily) {
+        // A daily run's document id doubles as the one-per-day lock:
+        // Firestore create-only semantics mean a second attempt the same
+        // day collides with the first and fails, mirroring the unique
+        // index this used to be.
+        var dailyPath = '/scores?documentId=' + encodeURIComponent(user.id + '_' + game + '_' + body.day);
+        return fsRequest(dailyPath, { method: 'POST', token: auth.access_token, body: { fields: fsFields(body) } })
+          .then(function () { return { posted: true }; })
+          .catch(function (err) {
+            // ALREADY_EXISTS (409) is the one-daily-run-per-day lock doing
+            // its job, which is a rule rather than a failure. The server
+            // already holds today's run, so the local record is settled
+            // too — leaving it pending would offer a retry that can never
+            // succeed.
+            if (err.status === 409) return { already: true };
+            throw err;
+          });
+      }
+
+      // Free play keeps one document per (player, game) — the id itself
+      // is the identity, so a new run replaces the old one instead of
+      // piling up as a separate row. Without this, the leaderboard filled
+      // up with the same handful of players' whole run history instead of
+      // one row per player. Read the existing best first so a worse run
+      // never overwrites a better one, and so we know create vs. update.
+      var docPath = '/scores/' + encodeURIComponent(user.id + '_' + game);
+      return fsRequest(docPath, { token: auth.access_token })
+        .then(function (doc) { return fsDoc(doc.fields); })
+        .catch(function (err) {
+          if (err.status === 404) return null;
+          throw err;
+        })
+        .then(function (existing) {
+          if (existing && existing.score != null && existing.score >= score) {
+            return { notImproved: true };
+          }
+          return fsRequest(existing ? docPath : '/scores?documentId=' + encodeURIComponent(user.id + '_' + game), {
+            method: existing ? 'PATCH' : 'POST',
+            token: auth.access_token,
+            body: { fields: fsFields(body) }
+          }).then(function () { return { posted: true }; });
+        });
+    }).then(function (result) {
+      if (result.already || (daily && result.posted)) settleDaily(game, score, meta, user.id);
+      if (result.notImproved) return { posted: false, reason: 'not-improved' };
+      if (result.already) return { posted: false, reason: 'already-played' };
       return { posted: true };
     }).catch(function (err) {
-      // ALREADY_EXISTS (409) is the one-daily-run-per-day lock doing its
-      // job, which is a rule rather than a failure. The server already
-      // holds today's run, so the local record is settled too — leaving it
-      // pending would offer a retry that can never succeed.
-      if (err.status === 409) {
-        if (daily) settleDaily(game, score, meta, user.id);
-        return { posted: false, reason: 'already-played' };
-      }
       return { posted: false, reason: String(err.message || err) };
     });
   }

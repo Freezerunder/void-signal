@@ -181,7 +181,9 @@
 
   // ================================================================== state
 
-  var stack, moving, debris, camera, cameraTarget, score, best, running, over;
+  var stack, moving, debris, camera, cameraTarget, score, best, running, over, perfectStreak;
+  var RECOVERY_STREAK = 3;
+  var RECOVERY_GROWTH = 26;
 
   function loadBest() {
     try { var v = localStorage.getItem(BEST_KEY); return v ? parseInt(v, 10) : 0; }
@@ -214,6 +216,7 @@
     cameraTarget = 0;
     score = 0;
     over = false;
+    perfectStreak = 0;
     $('scorenum').textContent = '0';
   }
 
@@ -255,8 +258,9 @@
     }
   }
 
-  function flashPerfect() {
+  function flashPerfect(text) {
     var el = $('perfectfx');
+    el.textContent = text || 'Perfect!';
     el.style.top = (HEIGHT * 0.32) + 'px';
     el.style.transition = 'none';
     el.style.opacity = '1';
@@ -311,7 +315,24 @@
     stack.push(layer);
     score++;
     $('scorenum').textContent = String(score);
-    if (perfect) flashPerfect();
+
+    if (perfect) {
+      perfectStreak++;
+      if (perfectStreak >= RECOVERY_STREAK) {
+        // A run of perfects earns a little width back — a small recovery
+        // rather than staying pinned at whatever the last miss left you
+        // with, and it keeps a hot streak feeling rewarded rather than
+        // just "safe".
+        layer.w = Math.min(BASE_SIZE, layer.w + RECOVERY_GROWTH);
+        layer.d = Math.min(BASE_SIZE, layer.d + RECOVERY_GROWTH);
+        perfectStreak = 0;
+        flashPerfect('Perfect ×3! +Size');
+      } else {
+        flashPerfect();
+      }
+    } else {
+      perfectStreak = 0;
+    }
 
     var nextAxis = axis === 'x' ? 'z' : 'x';
     var nextSpeed = Math.min(MOVE_SPEED_MAX, moving.speed * MOVE_SPEED_STEP);
