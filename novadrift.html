@@ -23,7 +23,7 @@
     -webkit-font-smoothing: antialiased;
   }
 
-  #track { position: fixed; inset: 0; display: block; }
+  #track { position: fixed; inset: 0; display: block; touch-action: none; }
 
   .backlink {
     position: fixed; top: 16px; left: 18px; z-index: 20;
@@ -88,6 +88,29 @@
     pointer-events: none;
   }
   .countdown[hidden] { display: none; }
+
+  /* Only real touchscreens get these — a narrow desktop window already has
+     a keyboard, and button-shaped furniture there would just be clutter. */
+  .touchbar { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touchbar { display: block; }
+  }
+  .tb-side {
+    position: fixed; bottom: 0; z-index: 40;
+    display: flex; gap: 14px;
+    padding: 0 18px calc(18px + env(safe-area-inset-bottom));
+  }
+  .tb-side.left { left: 0; }
+  .tb-side.right { right: 0; flex-direction: row-reverse; }
+  .tb-round {
+    width: 68px; height: 68px; border-radius: 50%;
+    border: 1px solid var(--line); background: rgba(20,22,28,.65);
+    color: var(--text); font-size: 24px; line-height: 1;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .tb-round:active { background: rgba(232,151,63,.28); border-color: rgba(232,151,63,.5); }
+  .tb-round.tb-gas { width: 82px; height: 82px; background: rgba(232,151,63,.22); border-color: rgba(232,151,63,.5); }
+  .tb-round.tb-gas:active { background: rgba(232,151,63,.4); }
 </style>
 </head>
 <body>
@@ -111,6 +134,17 @@
 <div class="hint"><b>W/↑</b> gas · <b>S/↓</b> brake · <b>A/D ←/→</b> steer · <b>R</b> reset</div>
 
 <div class="countdown" id="countdown" hidden></div>
+
+<div class="touchbar">
+  <div class="tb-side left">
+    <button class="tb-round" id="tb-left">◀</button>
+    <button class="tb-round" id="tb-right">▶</button>
+  </div>
+  <div class="tb-side right">
+    <button class="tb-round" id="tb-brake">▼</button>
+    <button class="tb-round tb-gas" id="tb-gas">▲</button>
+  </div>
+</div>
 
 <div class="overlay" id="start">
   <h1><b>N</b>OVA DRIFT</h1>
@@ -311,6 +345,24 @@
   window.addEventListener('keyup', function (e) { keys[e.key.toLowerCase()] = false; });
 
   function isDown(a, b) { return !!(keys[a] || keys[b]); }
+
+  // ---------------------------------------------------------- touch controls
+  // Buttons just drive the same `keys` map the keyboard does, so every game
+  // system (steering, drawCar's tilt, physics) needs no separate touch path.
+  function bindTouchKey(id, key) {
+    var btn = $(id);
+    var press = function (e) { e.preventDefault(); keys[key] = true; if (!running) startCountdown(); };
+    var release = function (e) { e.preventDefault(); keys[key] = false; };
+    btn.addEventListener('pointerdown', press);
+    btn.addEventListener('pointerup', release);
+    btn.addEventListener('pointercancel', release);
+    btn.addEventListener('pointerleave', release);
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+  bindTouchKey('tb-left', 'a');
+  bindTouchKey('tb-right', 'd');
+  bindTouchKey('tb-gas', 'w');
+  bindTouchKey('tb-brake', 's');
 
   // ------------------------------------------------------------- start flow
 

@@ -55,6 +55,7 @@
     width: 300px;
     height: 600px;
     border-radius: 6px;
+    touch-action: none;
   }
 
   .panel {
@@ -248,7 +249,31 @@
        an in-flow link would become a sibling item and shove the board off
        centre. The board is only ~34vh wide, so there is room at the left. */
     .backlink { top: 10px; left: 10px; padding: 6px 9px; font-size: 9.5px; }
+    /* Room for the touch bar so it never overlaps the board on a short
+       phone screen. */
+    body { padding-bottom: 96px; }
   }
+
+  /* Only real touchscreens get the on-screen controls — a narrow desktop
+     window has a mouse and keyboard already, and showing button-shaped
+     furniture there would just be clutter. */
+  .touchbar { display: none; }
+  @media (hover: none) and (pointer: coarse) {
+    .touchbar {
+      display: flex; gap: 8px;
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+      padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+      background: linear-gradient(180deg, transparent, rgba(10,12,18,.9) 35%);
+    }
+  }
+  .tbtn {
+    flex: 1; padding: 16px 0; border-radius: 12px;
+    border: 1px solid var(--line); background: rgba(255,255,255,.06);
+    color: var(--text); font-size: 19px; line-height: 1;
+    -webkit-user-select: none; user-select: none; touch-action: manipulation;
+  }
+  .tbtn:active { background: rgba(255,255,255,.16); }
+  .tbtn.wide { flex: 1.6; font-size: 12px; letter-spacing: .12em; text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -314,6 +339,14 @@
       </div>
     </div>
   </div>
+</div>
+
+<div class="touchbar" id="touchbar">
+  <button class="tbtn" id="tb-left">◀</button>
+  <button class="tbtn" id="tb-rotate">⟳</button>
+  <button class="tbtn" id="tb-right">▶</button>
+  <button class="tbtn" id="tb-down">▼</button>
+  <button class="tbtn wide" id="tb-hard">Drop</button>
 </div>
 
 <script src="nova.js"></script>
@@ -1082,6 +1115,61 @@
         softDrop = false;
         break;
     }
+  });
+
+  // ---------------------------------------------------------- touch controls
+  // Mirrors the keydown/keyup cases above exactly, so DAS auto-repeat and
+  // soft-drop feel identical whether the input came from a key or a button.
+
+  function pressLeft() {
+    if (state !== 'playing') return;
+    held.left = true;
+    dasDir = -1;
+    dasTimer = DAS;
+    move(-1);
+  }
+  function releaseLeft() {
+    held.left = false;
+    if (dasDir === -1) { dasDir = held.right ? 1 : 0; dasTimer = DAS; }
+  }
+  function pressRight() {
+    if (state !== 'playing') return;
+    held.right = true;
+    dasDir = 1;
+    dasTimer = DAS;
+    move(1);
+  }
+  function releaseRight() {
+    held.right = false;
+    if (dasDir === 1) { dasDir = held.left ? -1 : 0; dasTimer = DAS; }
+  }
+  function pressDown() {
+    if (state !== 'playing') return;
+    softDrop = true;
+    dropTimer = Math.max(dropTimer, SOFT_DROP_MS);
+  }
+  function releaseDown() { softDrop = false; }
+
+  function bindHoldButton(id, onDown, onUp) {
+    var btn = document.getElementById(id);
+    btn.addEventListener('pointerdown', function (e) { e.preventDefault(); onDown(); });
+    btn.addEventListener('pointerup', function (e) { e.preventDefault(); onUp(); });
+    btn.addEventListener('pointercancel', function () { onUp(); });
+    btn.addEventListener('pointerleave', function () { onUp(); });
+    btn.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+  }
+
+  bindHoldButton('tb-left', pressLeft, releaseLeft);
+  bindHoldButton('tb-right', pressRight, releaseRight);
+  bindHoldButton('tb-down', pressDown, releaseDown);
+
+  document.getElementById('tb-rotate').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    if (state === 'playing') rotate();
+  });
+  document.getElementById('tb-hard').addEventListener('pointerdown', function (e) {
+    e.preventDefault();
+    if (state === 'playing') hardDrop();
   });
 
   el.overlay.addEventListener('click', function () {

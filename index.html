@@ -625,6 +625,9 @@
     .hero { height: 260px; }
     .hero-body { left: 24px; right: 24px; max-width: none; }
     .hero-title { font-size: 26px; }
+    /* Safari auto-zooms the page on focusing any input under 16px — this
+       keeps the desktop's compact monospace look everywhere else. */
+    .field input { font-size: 16px; }
   }
 </style>
 </head>

@@ -522,6 +522,14 @@
     w.className = 'warn';
     w.innerHTML = '<b>Heads up:</b> this browser does not support the Pointer Lock API, so the Flick Trainer and Auto Finder can\'t run here. The Convert tab above still works fully — try Chrome, Firefox, or Edge for the trainer.';
     $('feature-warn').appendChild(w);
+  } else if (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches) {
+    // The API can be *present* on a touchscreen while being meaningless —
+    // there's no physical mouse to calibrate a cm/360 for. Rather than let
+    // a tap silently do nothing in the trainer canvas, say so up front.
+    var wt = document.createElement('div');
+    wt.className = 'warn';
+    wt.innerHTML = '<b>Heads up:</b> the Flick Trainer and Auto Finder calibrate a real mouse\'s sensitivity, which isn\'t something a touchscreen has — they need an actual mouse to be meaningful. The Convert tab above still works fully on this device.';
+    $('feature-warn').appendChild(wt);
   }
 
   // =============================================================== audio
