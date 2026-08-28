@@ -3846,7 +3846,7 @@ Wherever the signal was going, you're already there.
 
   // Only the owner account gets these. The dev flag is decided server-side —
   // the database hands it to the first profile ever created and refuses to
-  // let anyone set it themselves (see supabase/schema.sql) — and the launcher
+  // let anyone set it themselves (see firebase/firestore.rules) — and the launcher
   // caches the signed-in profile under 'nova.auth.v1'. Anyone else, a guest,
   // or someone opening this file directly never sees the tab.
   //

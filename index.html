@@ -431,6 +431,86 @@
   }
   .lbempty { padding: 10px 0 12px; font-size: 11.5px; color: var(--dim); }
 
+  /* --------------------------------------------------------------- chats */
+
+  .chatwrap {
+    display: flex; gap: 18px; max-width: 900px;
+    height: min(600px, 70vh);
+  }
+  .chat-people {
+    width: 200px; flex: none; overflow-y: auto;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    padding: 8px;
+  }
+  .chat-person {
+    display: flex; align-items: center; gap: 9px;
+    width: 100%; text-align: left; padding: 9px 10px; border-radius: 8px;
+    background: none; border: none; color: var(--dim);
+    font-size: 12.5px; cursor: pointer;
+  }
+  .chat-person:hover { background: rgba(255,255,255,.04); color: var(--text); }
+  .chat-person.on { background: rgba(232,151,63,.12); color: var(--accent); }
+  .chat-person .dot {
+    width: 7px; height: 7px; border-radius: 50%; flex: none;
+    background: var(--dim);
+  }
+  .chat-person.on .dot { background: var(--accent); }
+  .chat-people-empty { padding: 10px; font-size: 11px; color: var(--dim); }
+
+  .chat-thread {
+    flex: 1; min-width: 0; display: flex; flex-direction: column;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden;
+  }
+  .chat-thread-head {
+    padding: 12px 16px; border-bottom: 1px solid var(--line);
+    font-size: 12.5px; letter-spacing: .04em; color: var(--text); flex: none;
+  }
+  .chat-thread-head .sub { color: var(--dim); font-size: 10.5px; margin-top: 2px; }
+  .chat-msgs {
+    flex: 1; overflow-y: auto; padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .chat-msg { max-width: 78%; }
+  .chat-msg .who {
+    font-size: 10px; letter-spacing: .04em; color: var(--dim); margin-bottom: 3px;
+  }
+  .chat-msg .bubble {
+    background: #1a1e26; border: 1px solid var(--line); border-radius: 10px;
+    padding: 8px 11px; font-size: 13px; line-height: 1.42;
+    color: var(--text); word-wrap: break-word; white-space: pre-wrap;
+  }
+  .chat-msg.mine { align-self: flex-end; }
+  .chat-msg.mine .who { text-align: right; }
+  .chat-msg.mine .bubble { background: rgba(232,151,63,.14); border-color: rgba(232,151,63,.3); }
+  .chat-empty { margin: auto; color: var(--dim); font-size: 12px; text-align: center; padding: 20px; }
+
+  .chat-input-row {
+    display: flex; gap: 8px; padding: 12px; border-top: 1px solid var(--line); flex: none;
+  }
+  .chat-input-row input {
+    flex: 1; padding: 10px 12px;
+    background: #090b0f; color: var(--text);
+    border: 1px solid var(--line); border-radius: 8px;
+    font-size: 13px; outline: none;
+  }
+  .chat-input-row input:focus { border-color: rgba(232,151,63,.55); }
+  .chat-input-row button {
+    padding: 0 16px; border-radius: 8px; border: none;
+    background: var(--accent); color: #1a1206; font-weight: 600; font-size: 12.5px;
+    cursor: pointer;
+  }
+  .chat-input-row button:disabled { opacity: .5; cursor: default; }
+  .chat-ttl-note {
+    max-width: 900px; margin-top: 10px; font-size: 10.5px; color: var(--dim);
+  }
+
+  @media (max-width: 720px) {
+    .chatwrap { flex-direction: column; height: auto; }
+    .chat-people { width: 100%; height: 130px; }
+    .chat-thread { height: 60vh; }
+  }
+
   /* ------------------------------------------------------------- account */
 
   .acctgrid {
@@ -683,6 +763,7 @@
     <nav class="side-nav">
       <button class="navbtn on" data-view="library"><span class="dot"></span>Library</button>
       <button class="navbtn" data-view="leaderboard"><span class="dot"></span>Leaderboard</button>
+      <button class="navbtn" data-view="chats"><span class="dot"></span>Chats</button>
       <button class="navbtn" data-view="downloads"><span class="dot"></span>Downloads</button>
       <button class="navbtn" data-view="account"><span class="dot"></span>Account</button>
       <button class="navbtn" disabled><span class="dot"></span>Store<span class="soon">Soon</span></button>
@@ -737,6 +818,30 @@
       </div>
 
       <div class="lbgrid" id="lbgrid"></div>
+    </section>
+
+    <!-- ---------------------------------------------------------- chats -->
+    <section class="view" id="view-chats" hidden>
+      <div class="head">
+        <h1>Chats</h1>
+        <p>Everyone, or one person at a time</p>
+      </div>
+
+      <div class="chatwrap">
+        <div class="chat-people" id="chat-people"></div>
+        <div class="chat-thread">
+          <div class="chat-thread-head">
+            <div id="chat-title">Everyone</div>
+            <div class="sub" id="chat-subtitle">Global chat</div>
+          </div>
+          <div class="chat-msgs" id="chat-msgs"></div>
+          <form class="chat-input-row" id="chat-form">
+            <input id="chat-input" type="text" maxlength="500" placeholder="Message…" autocomplete="off">
+            <button type="submit" id="chat-send">Send</button>
+          </form>
+        </div>
+      </div>
+      <div class="chat-ttl-note">Messages disappear 24 hours after they're sent.</div>
     </section>
 
     <!-- ----------------------------------------------------- downloads -->
@@ -805,15 +910,6 @@
           <div id="i-plays"></div>
         </div>
       </div>
-
-      <div class="warn">
-        <b>Heads up:</b> accounts and scores live on a Supabase project shared by
-        everyone who plays, so they follow you between browsers and devices. The
-        rules that matter are enforced on the server: the board is append-only,
-        your name is stamped onto a score by the database rather than sent by
-        this page, and dev access is decided there too. It is still a hobby
-        project rather than a bank — don't reuse a real password here.
-      </div>
     </section>
   </main>
 </div>
@@ -827,9 +923,10 @@
 
   // ============================================================== accounts
   // Accounts and the leaderboard live on the server now (see nova.js and
-  // supabase/schema.sql). What used to be here — a localStorage user table
-  // with hand-rolled password hashing — is gone: it only ever worked on the
-  // one browser that created it, which is exactly what the server fixes.
+  // firebase/firestore.rules). What used to be here — a localStorage user
+  // table with hand-rolled password hashing — is gone: it only ever worked
+  // on the one browser that created it, which is exactly what the server
+  // fixes.
 
   var N = window.Nova;
   var PLAYS_KEY = 'nova.plays.v1';
@@ -1254,7 +1351,7 @@
 
   // ================================================================== views
 
-  var VIEWS = ['library', 'leaderboard', 'downloads', 'account'];
+  var VIEWS = ['library', 'leaderboard', 'chats', 'downloads', 'account'];
 
   function showView(name) {
     VIEWS.forEach(function (v) { $('view-' + v).hidden = v !== name; });
@@ -1264,6 +1361,7 @@
     if (name === 'account') buildAccount();
     if (name === 'downloads') buildDownloads();
     if (name === 'leaderboard') buildLeaderboard();
+    if (name === 'chats') enterChats(); else leaveChats();
   }
 
   // ------------------------------------------------------------ leaderboard
@@ -1352,6 +1450,195 @@
 
   Array.prototype.forEach.call(document.querySelectorAll('.navbtn'), function (b) {
     if (b.dataset.view) b.addEventListener('click', function () { showView(b.dataset.view); });
+  });
+
+  // ------------------------------------------------------------------ chats
+  // Global chat plus 1:1 DMs, both backed by nova.js's chat.* functions.
+  // Messages carry a 24h expiry there — there is no history beyond that by
+  // design, so no "load more" / pagination is needed here, just a poll.
+
+  var CHAT_POLL_MS = 4000;
+  var chatActive = 'global';   // 'global', or another player's uid for a DM
+  var chatPeople = [];         // everyone but me, for the DM list
+  var chatPollTimer = null;
+  var chatToken = 0;           // bumped on every switch, so a reply that was
+                                // already in flight for the thread just left
+                                // can't land on top of the one just opened
+  var chatLastSig = '';        // last-rendered signature, so a poll that saw
+                                // nothing new doesn't reset scroll position
+  var chatSending = false;
+
+  function chatGuest() { return !session || session.guest; }
+
+  function buildChatPeople() {
+    var wrap = $('chat-people');
+    wrap.innerHTML = '';
+
+    var everyone = document.createElement('button');
+    everyone.type = 'button';
+    everyone.className = 'chat-person' + (chatActive === 'global' ? ' on' : '');
+    var dot0 = document.createElement('span'); dot0.className = 'dot';
+    var label0 = document.createElement('span'); label0.textContent = 'Everyone';
+    everyone.appendChild(dot0); everyone.appendChild(label0);
+    everyone.addEventListener('click', function () { selectChat('global'); });
+    wrap.appendChild(everyone);
+
+    if (chatGuest()) return;
+
+    if (!chatPeople.length) {
+      var empty = document.createElement('div');
+      empty.className = 'chat-people-empty';
+      empty.textContent = 'No one else has an account yet.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    chatPeople.forEach(function (p) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'chat-person' + (chatActive === p.id ? ' on' : '');
+      var dot = document.createElement('span'); dot.className = 'dot';
+      var label = document.createElement('span'); label.textContent = p.username;
+      btn.appendChild(dot); btn.appendChild(label);
+      btn.addEventListener('click', function () { selectChat(p.id); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function updateChatHead() {
+    if (chatActive === 'global') {
+      $('chat-title').textContent = 'Everyone';
+      $('chat-subtitle').textContent = 'Global chat';
+      return;
+    }
+    var p = chatPeople.filter(function (x) { return x.id === chatActive; })[0];
+    $('chat-title').textContent = p ? p.username : 'Direct message';
+    $('chat-subtitle').textContent = 'Direct message';
+  }
+
+  function selectChat(id) {
+    if (chatActive === id) return;
+    chatActive = id;
+    chatToken++;
+    chatLastSig = '';
+    buildChatPeople();
+    updateChatHead();
+    renderChatMessages([]);
+    loadChatThread();
+  }
+
+  function chatFmtTime(at) {
+    var d = new Date(at);
+    var h = d.getHours(), m = d.getMinutes();
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + (m < 10 ? '0' : '') + m + ' ' + ampm;
+  }
+
+  function renderChatMessages(rows) {
+    var wrap = $('chat-msgs');
+    var wasAtBottom = wrap.scrollHeight - wrap.scrollTop - wrap.clientHeight < 40;
+    wrap.innerHTML = '';
+
+    if (!rows.length) {
+      var empty = document.createElement('div');
+      empty.className = 'chat-empty';
+      empty.textContent = 'No messages yet — say hello.';
+      wrap.appendChild(empty);
+      return;
+    }
+
+    rows.forEach(function (row) {
+      var mine = !chatGuest() && row.userId === session.id;
+      var msg = document.createElement('div');
+      msg.className = 'chat-msg' + (mine ? ' mine' : '');
+
+      var who = document.createElement('div');
+      who.className = 'who';
+      who.textContent = (mine ? 'You' : row.username) + ' · ' + chatFmtTime(row.at);
+
+      var bubble = document.createElement('div');
+      bubble.className = 'bubble';
+      bubble.textContent = row.text;
+
+      msg.appendChild(who);
+      msg.appendChild(bubble);
+      wrap.appendChild(msg);
+    });
+
+    if (wasAtBottom) wrap.scrollTop = wrap.scrollHeight;
+  }
+
+  function loadChatThread() {
+    if (chatGuest() && chatActive !== 'global') { selectChat('global'); return; }
+
+    var myToken = chatToken;
+    var fetcher = chatActive === 'global' ? N.chat.listGlobal(50) : N.chat.listDirect(chatActive, 50);
+
+    fetcher.then(function (rows) {
+      if (myToken !== chatToken) return;
+      var key = rows.map(function (r) { return r.at + ':' + r.userId + ':' + r.text; }).join('|');
+      if (key === chatLastSig) return;
+      chatLastSig = key;
+      renderChatMessages(rows);
+    });
+  }
+
+  function enterChats() {
+    var guest = chatGuest();
+    $('chat-input').disabled = guest;
+    $('chat-send').disabled = guest;
+    $('chat-input').placeholder = guest ? 'Sign in to chat' : 'Message…';
+
+    updateChatHead();
+    if (guest) {
+      chatPeople = [];
+      buildChatPeople();
+    } else {
+      N.chat.people().then(function (people) {
+        chatPeople = people
+          .filter(function (p) { return p.id !== session.id; })
+          .sort(function (a, b) { return a.username.localeCompare(b.username); });
+        buildChatPeople();
+        updateChatHead();
+      });
+      buildChatPeople();
+    }
+
+    chatLastSig = '';
+    loadChatThread();
+
+    if (chatPollTimer) clearInterval(chatPollTimer);
+    chatPollTimer = setInterval(loadChatThread, CHAT_POLL_MS);
+  }
+
+  function leaveChats() {
+    if (chatPollTimer) { clearInterval(chatPollTimer); chatPollTimer = null; }
+  }
+
+  $('chat-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    if (chatGuest() || chatSending) return;
+    var input = $('chat-input');
+    var text = input.value.trim();
+    if (!text) return;
+
+    chatSending = true;
+    $('chat-send').disabled = true;
+
+    var send = chatActive === 'global' ? N.chat.sendGlobal(text) : N.chat.sendDirect(chatActive, text);
+    send.then(function (res) {
+      chatSending = false;
+      $('chat-send').disabled = false;
+      if (res && res.posted) {
+        input.value = '';
+        chatLastSig = '';
+        loadChatThread();
+      }
+    }).catch(function () {
+      chatSending = false;
+      $('chat-send').disabled = false;
+    });
   });
 
   function buildAccount() {

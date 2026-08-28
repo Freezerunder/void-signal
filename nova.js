@@ -611,6 +611,150 @@
     });
   }
 
+  // --------------------------------------------------------------- chat
+  // Messages carry an `expireAt` timestamp and disappear after it passes.
+  // Firestore's native TTL sweep would do this server-side for free, but it
+  // requires the project to be on a billing-enabled (Blaze) plan, and this
+  // one deliberately stays on the no-card-required Spark plan — the whole
+  // point of moving off Supabase was to avoid anything that needs upkeep to
+  // stay working. So instead, whoever next loads a room deletes that room's
+  // own expired messages as a side effect of reading it (see chatRows) —
+  // no billing, no Cloud Function, just ordinary reads and deletes already
+  // allowed by firestore.rules for anyone signed in, once a message's own
+  // expireAt has passed.
+  var CHAT_TTL_MS = 24 * 60 * 60 * 1000;
+
+  function dmRoomId(a, b) {
+    return a < b ? a + '_' + b : b + '_' + a;
+  }
+
+  // expireAt/createdAt have to go over the wire as Firestore's `timestamp`
+  // type (not a plain string) or the TTL policy — which only watches
+  // timestamp-typed fields — silently ignores the document forever.
+  function chatFields(obj, timestampKeys) {
+    var fields = fsFields(obj);
+    (timestampKeys || []).forEach(function (k) {
+      if (obj[k] != null) fields[k] = { timestampValue: obj[k] };
+    });
+    return fields;
+  }
+
+  function chatRows(rows) {
+    var docs = (rows || []).filter(function (r) { return r && r.document; });
+    var now = Date.now();
+    var live = [];
+    docs.forEach(function (r) {
+      var data = fsDoc(r.document.fields);
+      if (data.expireAt && Date.parse(data.expireAt) <= now) {
+        // Fire-and-forget: this is best-effort cleanup, not a guarantee, and
+        // a failed delete here (offline, a lost race with someone else's
+        // sweep) just leaves the message for the next reader to catch.
+        var path = r.document.name.split('/documents')[1];
+        fsRequest(path, { method: 'DELETE', token: auth && auth.access_token }).catch(function () {});
+        return;
+      }
+      live.push({ userId: data.userId, username: data.username, text: data.text, at: Date.parse(data.createdAt) || 0 });
+    });
+    return live.reverse();
+  }
+
+  function sendGlobalMessage(text) {
+    var user = currentUser();
+    if (!user) return Promise.reject(new Error('Sign in to chat.'));
+    var clean = (text || '').trim();
+    if (!clean) return Promise.reject(new Error('Message is empty.'));
+    if (clean.length > 500) return Promise.reject(new Error('Message is too long (500 characters max).'));
+
+    return refreshIfNeeded().then(function () {
+      var now = Date.now();
+      var body = {
+        userId: user.id, username: user.username, text: clean,
+        createdAt: new Date(now).toISOString(),
+        expireAt: new Date(now + CHAT_TTL_MS).toISOString()
+      };
+      return fsRequest('/globalChat', {
+        method: 'POST', token: auth.access_token,
+        body: { fields: chatFields(body, ['createdAt', 'expireAt']) }
+      });
+    }).then(function () { return { posted: true }; })
+      .catch(function (err) { return { posted: false, reason: String(err.message || err) }; });
+  }
+
+  function listGlobalMessages(limit) {
+    var body = {
+      structuredQuery: {
+        from: [{ collectionId: 'globalChat' }],
+        orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+        limit: limit || 50
+      }
+    };
+    return fsRequest(':runQuery', { method: 'POST', token: null, body: body })
+      .then(chatRows)
+      .catch(function () { return []; });
+  }
+
+  function sendDirectMessage(otherId, text) {
+    var user = currentUser();
+    if (!user) return Promise.reject(new Error('Sign in to chat.'));
+    var clean = (text || '').trim();
+    if (!clean) return Promise.reject(new Error('Message is empty.'));
+    if (clean.length > 500) return Promise.reject(new Error('Message is too long (500 characters max).'));
+
+    return refreshIfNeeded().then(function () {
+      var now = Date.now();
+      var participants = [user.id, otherId].sort();
+      var body = {
+        roomId: dmRoomId(user.id, otherId), participants: participants,
+        userId: user.id, username: user.username, text: clean,
+        createdAt: new Date(now).toISOString(),
+        expireAt: new Date(now + CHAT_TTL_MS).toISOString()
+      };
+      return fsRequest('/dmMessages', {
+        method: 'POST', token: auth.access_token,
+        body: { fields: chatFields(body, ['createdAt', 'expireAt']) }
+      });
+    }).then(function () { return { posted: true }; })
+      .catch(function (err) { return { posted: false, reason: String(err.message || err) }; });
+  }
+
+  function listDirectMessages(otherId, limit) {
+    var user = currentUser();
+    if (!user) return Promise.resolve([]);
+
+    return refreshIfNeeded().then(function () {
+      var body = {
+        structuredQuery: {
+          from: [{ collectionId: 'dmMessages' }],
+          where: {
+            compositeFilter: {
+              op: 'AND',
+              filters: [
+                { fieldFilter: { field: { fieldPath: 'participants' }, op: 'ARRAY_CONTAINS', value: { stringValue: user.id } } },
+                { fieldFilter: { field: { fieldPath: 'roomId' }, op: 'EQUAL', value: { stringValue: dmRoomId(user.id, otherId) } } }
+              ]
+            }
+          },
+          orderBy: [{ field: { fieldPath: 'createdAt' }, direction: 'DESCENDING' }],
+          limit: limit || 50
+        }
+      };
+      return fsRequest(':runQuery', { method: 'POST', token: auth.access_token, body: body });
+    }).then(chatRows).catch(function () { return []; });
+  }
+
+  // Everyone with an account, for the "start a chat with…" picker. The
+  // friend group this runs for is small enough that one unpaged fetch of
+  // the whole (publicly-readable) profiles collection is simpler and cheap
+  // enough to beat paginating it.
+  function listPeople() {
+    return fsRequest('/profiles?pageSize=300', { token: null }).then(function (res) {
+      return (res.documents || []).map(function (doc) {
+        var data = fsDoc(doc.fields);
+        return { id: doc.name.split('/').pop(), username: data.username, realName: data.realName || '' };
+      });
+    }).catch(function () { return []; });
+  }
+
   window.Nova = {
     configured: !!(CONFIG.apiKey && CONFIG.projectId),
     isDesktop: IS_DESKTOP,
@@ -622,6 +766,13 @@
     submitScore: submitScore,
     topScores: topScores,
     localScores: localScores,
+    chat: {
+      sendGlobal: sendGlobalMessage,
+      listGlobal: listGlobalMessages,
+      sendDirect: sendDirectMessage,
+      listDirect: listDirectMessages,
+      people: listPeople
+    },
     daily: {
       stamp: dayStamp,
       rng: dailyRng,

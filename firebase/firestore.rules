@@ -125,5 +125,82 @@ service cloud.firestore {
 
       allow delete: if false;
     }
+
+    // -------------------------------------------------------------- chat
+    //
+    // Split into two collections instead of one keyed by a roomId field, so
+    // each `allow read` is a plain per-document check Firestore can verify
+    // against a `list`/query request on its own — no OR of "public room" vs
+    // "private room" for the rule engine to statically prove against a
+    // query shape. Messages carry an `expireAt` timestamp and disappear
+    // once it passes — Firestore's native TTL sweep would do that for free,
+    // but it needs a billing-enabled project, which this one deliberately
+    // isn't. So instead, `allow delete` opens up only once a message's own
+    // expireAt is in the past, and nova.js's chatRows deletes exactly those
+    // as a side effect of reading a room, which is what keeps a
+    // long-running chat from growing storage forever with no Cloud
+    // Function or paid plan required.
+    //
+    // Shared by both: the sender and display name must be the caller's own
+    // (checked against the profile on file, same as scores above), the text
+    // is bounded, and expireAt/createdAt must be real timestamps with
+    // expireAt in the future and capped — a client cannot ask its own
+    // message to outlive the cap, though it may ask for less.
+    function validChatFields() {
+      return request.resource.data.userId == request.auth.uid
+        && request.resource.data.username ==
+             get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data.username
+        && request.resource.data.text is string
+        && request.resource.data.text.size() >= 1
+        && request.resource.data.text.size() <= 500
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.expireAt is timestamp
+        && request.resource.data.expireAt > request.resource.data.createdAt
+        && request.resource.data.expireAt <= request.time + duration.value(2, 'd');
+    }
+
+    match /globalChat/{msgId} {
+      allow read: if true;
+      allow create: if request.auth != null && validChatFields();
+      // Anyone signed in may delete a message once it has actually expired
+      // — there is nothing left to protect in an expired message, and this
+      // is what lets whichever reader arrives next do the sweeping. Not
+      // "expired for me": resource.data.expireAt is compared against the
+      // server's own request.time, so a client cannot delete a message
+      // early by lying about what time it is.
+      allow delete: if request.auth != null && request.time > resource.data.expireAt;
+      allow update: if false;
+    }
+
+    match /dmMessages/{msgId} {
+      // A `list` query must filter `participants array-contains
+      // request.auth.uid` for Firestore to accept this rule on a query
+      // rather than only on direct-by-id reads — see nova.js's
+      // listDirectMessages, which does exactly that.
+      // A participant may always read; anyone signed in may delete once a
+      // message has actually expired (same expired-only reasoning as
+      // globalChat above) even after they've left the conversation, so a
+      // stale expired message is never stuck unsweepable.
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.participants;
+      allow delete: if request.auth != null && request.time > resource.data.expireAt;
+
+      allow create: if request.auth != null
+        && validChatFields()
+        && request.resource.data.participants is list
+        && request.resource.data.participants.size() == 2
+        && request.auth.uid in request.resource.data.participants
+        // roomId is derived, not trusted: recomputed here from the sorted
+        // pair so a client cannot address (and thus read back) a
+        // conversation under a roomId that doesn't match who's actually in
+        // it.
+        && request.resource.data.roomId == (
+             request.resource.data.participants[0] < request.resource.data.participants[1]
+               ? request.resource.data.participants[0] + '_' + request.resource.data.participants[1]
+               : request.resource.data.participants[1] + '_' + request.resource.data.participants[0]
+           );
+
+      allow update: if false;
+    }
   }
 }
