@@ -118,6 +118,48 @@
   var WIDTH = 0, HEIGHT = 0, DPR = 1;
 
   var GRAVITY, FLAP_VY, BIRD_R, PIPE_W, GAP, PIPE_SPACING, SCROLL_SPEED;
+  var GROUND_H, PIPE_CAP_H, PIPE_CAP_OVER;
+  var skyGrad, groundGrad, pipeGrad, pipeCapGrad, pipeCapDark;
+  var clouds = [], hillsInit = false;
+
+  function buildGradients() {
+    skyGrad = ctx.createLinearGradient(0, 0, 0, HEIGHT);
+    skyGrad.addColorStop(0, '#324768');
+    skyGrad.addColorStop(0.55, '#2a3a55');
+    skyGrad.addColorStop(1, '#171c28');
+
+    groundGrad = ctx.createLinearGradient(0, HEIGHT - GROUND_H, 0, HEIGHT);
+    groundGrad.addColorStop(0, '#7bc17a');
+    groundGrad.addColorStop(0.18, '#5a9955');
+    groundGrad.addColorStop(1, '#3c6b3d');
+
+    pipeGrad = ctx.createLinearGradient(0, 0, PIPE_W, 0);
+    pipeGrad.addColorStop(0, '#2f6e63');
+    pipeGrad.addColorStop(0.16, '#5cb8a6');
+    pipeGrad.addColorStop(0.5, '#4a9d8f');
+    pipeGrad.addColorStop(0.88, '#357c70');
+    pipeGrad.addColorStop(1, '#2a5f56');
+
+    pipeCapGrad = ctx.createLinearGradient(0, 0, PIPE_W + PIPE_CAP_OVER * 2, 0);
+    pipeCapGrad.addColorStop(0, '#245850');
+    pipeCapGrad.addColorStop(0.18, '#6cc9b6');
+    pipeCapGrad.addColorStop(0.5, '#57ac9d');
+    pipeCapGrad.addColorStop(0.88, '#3a8577');
+    pipeCapGrad.addColorStop(1, '#204a43');
+  }
+
+  function initClouds() {
+    clouds = [];
+    var n = 5;
+    for (var i = 0; i < n; i++) {
+      clouds.push({
+        x: Math.random() * WIDTH * 1.4,
+        y: HEIGHT * (0.08 + Math.random() * 0.32),
+        r: HEIGHT * (0.045 + Math.random() * 0.05),
+        speed: 0.16 + Math.random() * 0.14
+      });
+    }
+  }
 
   function resize() {
     DPR = Math.min(window.devicePixelRatio || 1, 2);
@@ -136,6 +178,12 @@
     GAP = Math.max(150, HEIGHT * 0.26);
     PIPE_SPACING = Math.max(220, WIDTH * 0.42);
     SCROLL_SPEED = Math.max(180, WIDTH * 0.26);
+    GROUND_H = Math.max(22, HEIGHT * 0.05);
+    PIPE_CAP_H = Math.max(14, HEIGHT * 0.022);
+    PIPE_CAP_OVER = Math.max(4, PIPE_W * 0.09);
+
+    buildGradients();
+    if (!hillsInit) { initClouds(); hillsInit = true; }
   }
   window.addEventListener('resize', resize);
   resize();
@@ -154,6 +202,7 @@
   // ================================================================== state
 
   var birdX, birdY, birdVY, pipes, score, running, over, spawnTimer;
+  var worldScroll, wingFlutter, particles, shakeMag;
 
   function resetGame() {
     birdX = WIDTH * 0.28;
@@ -163,8 +212,30 @@
     score = 0;
     over = false;
     spawnTimer = 0;
+    worldScroll = 0;
+    wingFlutter = 0;
+    particles = [];
+    shakeMag = 0;
     $('scorenum').textContent = '0';
     spawnPipe(WIDTH + 60);
+  }
+
+  function spawnParticles(n, x, y, opts) {
+    opts = opts || {};
+    for (var i = 0; i < n; i++) {
+      var ang = opts.spread != null
+        ? (opts.dir || 0) + (Math.random() - 0.5) * opts.spread
+        : Math.random() * Math.PI * 2;
+      var spd = (opts.minSpeed || 20) + Math.random() * (opts.speedRange || 60);
+      particles.push({
+        x: x, y: y,
+        vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+        r: (opts.minR || 1.5) + Math.random() * (opts.rRange || 2),
+        life: 0, maxLife: opts.life || 0.6,
+        gravity: opts.gravity != null ? opts.gravity : 0,
+        color: opts.color || '255,255,255'
+      });
+    }
   }
 
   function spawnPipe(x) {
@@ -179,11 +250,35 @@
 
   // =============================================================== physics
 
+  function updateAmbient(dt) {
+    for (var i = 0; i < clouds.length; i++) {
+      var c = clouds[i];
+      c.x -= SCROLL_SPEED * c.speed * dt;
+      if (c.x < -c.r * 2.2) {
+        c.x = WIDTH + c.r * 2.2;
+        c.y = HEIGHT * (0.08 + Math.random() * 0.32);
+        c.r = HEIGHT * (0.045 + Math.random() * 0.05);
+      }
+    }
+    for (var j = particles.length - 1; j >= 0; j--) {
+      var p = particles[j];
+      p.life += dt;
+      if (p.life >= p.maxLife) { particles.splice(j, 1); continue; }
+      p.vy += p.gravity * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+    }
+    if (wingFlutter > 0) wingFlutter = Math.max(0, wingFlutter - dt * 3.2);
+    if (shakeMag > 0.05) shakeMag *= Math.max(0, 1 - dt * 7); else shakeMag = 0;
+  }
+
   function update(dt) {
+    updateAmbient(dt);
     if (!running || over) return;
 
     birdVY += GRAVITY * dt;
     birdY += birdVY * dt;
+    worldScroll += SCROLL_SPEED * dt;
 
     spawnTimer += SCROLL_SPEED * dt;
     if (spawnTimer >= PIPE_SPACING) {
@@ -224,36 +319,183 @@
     if (!running) { startGame(); return; }
     if (over) return;
     birdVY = FLAP_VY;
+    wingFlutter = 1;
+    spawnParticles(3, birdX - BIRD_R * 0.6, birdY + BIRD_R * 0.3, {
+      dir: Math.PI, spread: 0.9, minSpeed: 40, speedRange: 50,
+      minR: 1, rRange: 1.6, life: 0.35, gravity: 40, color: '255,255,255'
+    });
   }
 
   // ================================================================ render
 
-  function render() {
-    var grd = ctx.createLinearGradient(0, 0, 0, HEIGHT);
-    grd.addColorStop(0, '#2a3a55');
-    grd.addColorStop(1, '#141a26');
-    ctx.fillStyle = grd;
+  function drawSky() {
+    ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
 
-    ctx.fillStyle = '#4a9d8f';
-    for (var i = 0; i < pipes.length; i++) {
-      var p = pipes[i];
-      ctx.fillRect(p.x, 0, PIPE_W, p.gapTop);
-      ctx.fillRect(p.x, p.gapTop + GAP, PIPE_W, HEIGHT - (p.gapTop + GAP));
+    for (var i = 0; i < clouds.length; i++) {
+      var c = clouds[i];
+      ctx.fillStyle = 'rgba(255,255,255,.10)';
+      ctx.beginPath();
+      ctx.ellipse(c.x, c.y, c.r, c.r * 0.6, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x - c.r * 0.55, c.y + c.r * 0.12, c.r * 0.6, c.r * 0.42, 0, 0, Math.PI * 2);
+      ctx.ellipse(c.x + c.r * 0.6, c.y + c.r * 0.1, c.r * 0.55, c.r * 0.4, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
 
+    // distant hill silhouette, parallax-scrolled slower than the pipes
+    var hillY = HEIGHT - GROUND_H;
+    var hillAmp = HEIGHT * 0.05;
+    var hillSpan = WIDTH * 0.5;
+    var hillOffset = (worldScroll * 0.12) % hillSpan;
+    ctx.fillStyle = 'rgba(20,26,40,.5)';
+    ctx.beginPath();
+    ctx.moveTo(-hillSpan, hillY);
+    for (var hx = -hillSpan; hx <= WIDTH + hillSpan; hx += hillSpan / 2) {
+      var wx = hx - hillOffset;
+      var wy = hillY - hillAmp - Math.sin(wx / hillSpan * Math.PI) * hillAmp * 0.6;
+      ctx.lineTo(wx, wy);
+    }
+    ctx.lineTo(WIDTH + hillSpan, hillY);
+    ctx.lineTo(WIDTH + hillSpan, HEIGHT);
+    ctx.lineTo(-hillSpan, HEIGHT);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawPipe(x, gapTop) {
+    var bottomY = gapTop + GAP;
+
+    ctx.fillStyle = pipeGrad;
+    ctx.fillRect(x, 0, PIPE_W, gapTop);
+    ctx.fillRect(x, bottomY, PIPE_W, HEIGHT - bottomY);
+
+    // rim highlight / shadow edges for a rounded-tube feel
+    ctx.fillStyle = 'rgba(255,255,255,.16)';
+    ctx.fillRect(x + PIPE_W * 0.14, 0, Math.max(1, PIPE_W * 0.08), gapTop);
+    ctx.fillRect(x + PIPE_W * 0.14, bottomY, Math.max(1, PIPE_W * 0.08), HEIGHT - bottomY);
+    ctx.fillStyle = 'rgba(0,0,0,.18)';
+    ctx.fillRect(x + PIPE_W * 0.86, 0, Math.max(1, PIPE_W * 0.1), gapTop);
+    ctx.fillRect(x + PIPE_W * 0.86, bottomY, Math.max(1, PIPE_W * 0.1), HEIGHT - bottomY);
+
+    // lip caps at each gap-facing end
+    ctx.fillStyle = pipeCapGrad;
+    ctx.fillRect(x - PIPE_CAP_OVER, gapTop - PIPE_CAP_H, PIPE_W + PIPE_CAP_OVER * 2, PIPE_CAP_H);
+    ctx.fillRect(x - PIPE_CAP_OVER, bottomY, PIPE_W + PIPE_CAP_OVER * 2, PIPE_CAP_H);
+    ctx.fillStyle = 'rgba(0,0,0,.22)';
+    ctx.fillRect(x - PIPE_CAP_OVER, gapTop - 2, PIPE_W + PIPE_CAP_OVER * 2, 2);
+    ctx.fillRect(x - PIPE_CAP_OVER, bottomY + PIPE_CAP_H - 2, PIPE_W + PIPE_CAP_OVER * 2, 2);
+  }
+
+  function drawGround() {
+    var y = HEIGHT - GROUND_H;
+    ctx.fillStyle = groundGrad;
+    ctx.fillRect(0, y, WIDTH, GROUND_H);
+    ctx.fillStyle = 'rgba(0,0,0,.14)';
+    ctx.fillRect(0, y, WIDTH, GROUND_H * 0.22);
+
+    // scrolling dirt ticks along the top edge of the ground band
+    var tickSpan = 26;
+    var offset = worldScroll % tickSpan;
+    ctx.fillStyle = 'rgba(255,255,255,.14)';
+    for (var tx = -offset; tx < WIDTH + tickSpan; tx += tickSpan) {
+      ctx.fillRect(tx, y + GROUND_H * 0.3, tickSpan * 0.5, Math.max(1, GROUND_H * 0.08));
+    }
+  }
+
+  function drawParticles() {
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      var a = Math.max(0, 1 - p.life / p.maxLife);
+      ctx.fillStyle = 'rgba(' + p.color + ',' + a + ')';
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  function drawBird() {
     ctx.save();
     ctx.translate(birdX, birdY);
     var tilt = Math.max(-0.6, Math.min(0.9, birdVY / (HEIGHT * 0.9)));
     ctx.rotate(tilt);
-    ctx.fillStyle = '#ffd166';
+
+    var idleBob = Math.sin(performance.now() / 220) * 0.12;
+    var wingAngle = -0.55 + wingFlutter * 1.5 + idleBob * (1 - wingFlutter);
+
+    // tail
+    ctx.fillStyle = '#e8a93f';
     ctx.beginPath();
-    ctx.arc(0, 0, BIRD_R, 0, Math.PI * 2);
+    ctx.moveTo(-BIRD_R * 0.7, 0);
+    ctx.lineTo(-BIRD_R * 1.5, -BIRD_R * 0.42);
+    ctx.lineTo(-BIRD_R * 1.5, BIRD_R * 0.1);
+    ctx.closePath();
     ctx.fill();
+
+    // wing, hinged near the body center and swept by wingAngle
+    ctx.save();
+    ctx.translate(-BIRD_R * 0.05, BIRD_R * 0.05);
+    ctx.rotate(wingAngle);
+    var wingGrad = ctx.createLinearGradient(0, -BIRD_R * 0.5, 0, BIRD_R * 0.5);
+    wingGrad.addColorStop(0, '#ffe19a');
+    wingGrad.addColorStop(1, '#e8a93f');
+    ctx.fillStyle = wingGrad;
+    ctx.beginPath();
+    ctx.ellipse(-BIRD_R * 0.15, 0, BIRD_R * 0.78, BIRD_R * 0.42, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // body
+    var bodyGrad = ctx.createRadialGradient(-BIRD_R * 0.3, -BIRD_R * 0.35, BIRD_R * 0.1, 0, 0, BIRD_R * 1.15);
+    bodyGrad.addColorStop(0, '#fff0c2');
+    bodyGrad.addColorStop(0.55, '#ffd166');
+    bodyGrad.addColorStop(1, '#f0a93f');
+    ctx.fillStyle = bodyGrad;
+    ctx.beginPath();
+    ctx.ellipse(0, 0, BIRD_R, BIRD_R * 0.86, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // belly highlight
+    ctx.fillStyle = 'rgba(255,255,255,.35)';
+    ctx.beginPath();
+    ctx.ellipse(-BIRD_R * 0.1, BIRD_R * 0.32, BIRD_R * 0.62, BIRD_R * 0.38, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // beak
+    ctx.fillStyle = '#ff8c42';
+    ctx.beginPath();
+    ctx.moveTo(BIRD_R * 0.78, -BIRD_R * 0.1);
+    ctx.lineTo(BIRD_R * 1.35, BIRD_R * 0.04);
+    ctx.lineTo(BIRD_R * 0.78, BIRD_R * 0.3);
+    ctx.closePath();
+    ctx.fill();
+
+    // eye
     ctx.fillStyle = '#1a1c22';
     ctx.beginPath();
-    ctx.arc(BIRD_R * 0.35, -BIRD_R * 0.25, BIRD_R * 0.18, 0, Math.PI * 2);
+    ctx.arc(BIRD_R * 0.4, -BIRD_R * 0.28, BIRD_R * 0.17, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.beginPath();
+    ctx.arc(BIRD_R * 0.46, -BIRD_R * 0.35, BIRD_R * 0.06, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.restore();
+  }
+
+  function render() {
+    ctx.save();
+    if (shakeMag > 0.05) {
+      ctx.translate((Math.random() - 0.5) * shakeMag, (Math.random() - 0.5) * shakeMag);
+    }
+
+    drawSky();
+
+    for (var i = 0; i < pipes.length; i++) drawPipe(pipes[i].x, pipes[i].gapTop);
+
+    drawGround();
+    drawParticles();
+    drawBird();
+
     ctx.restore();
   }
 
@@ -284,6 +526,11 @@
     running = false;
     if (score > best) { best = score; saveBest(best); }
     $('finalscore').textContent = 'Score ' + score + (best > 0 ? ' · Best ' + best : '');
+    shakeMag = 14;
+    spawnParticles(14, birdX, birdY, {
+      spread: Math.PI * 2, minSpeed: 60, speedRange: 160,
+      minR: 1.5, rRange: 2.5, life: 0.7, gravity: 260, color: '255,209,102'
+    });
     setTimeout(function () { $('gameover').hidden = false; }, 350);
     postScore();
   }

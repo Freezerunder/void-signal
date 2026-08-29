@@ -155,19 +155,34 @@
 
   // ================================================================== state
 
-  var snake, dir, nextDir, food, score, tickTimer, tickInterval, running, over;
+  var snake, prevSnake, dir, nextDir, food, score, tickTimer, tickInterval, running, over, particles;
 
   function resetGame() {
     var mid = Math.floor(CELLS / 2);
     snake = [{ x: mid - 1, y: mid }, { x: mid - 2, y: mid }, { x: mid - 3, y: mid }];
+    prevSnake = snake.map(function (s) { return { x: s.x, y: s.y }; });
     dir = { x: 1, y: 0 };
     nextDir = { x: 1, y: 0 };
     score = 0;
     tickTimer = 0;
     tickInterval = TICK_START;
     over = false;
+    particles = [];
     $('scorenum').textContent = '0';
     placeFood();
+  }
+
+  function spawnParticles(n, cx, cy, color) {
+    for (var i = 0; i < n; i++) {
+      var ang = Math.random() * Math.PI * 2;
+      var spd = 30 + Math.random() * 70;
+      particles.push({
+        x: cx, y: cy,
+        vx: Math.cos(ang) * spd, vy: Math.sin(ang) * spd,
+        r: 1.5 + Math.random() * 2, life: 0, maxLife: 0.45 + Math.random() * 0.2,
+        color: color
+      });
+    }
   }
 
   function placeFood() {
@@ -192,6 +207,8 @@
   }
 
   function tick() {
+    prevSnake = snake.map(function (s) { return { x: s.x, y: s.y }; });
+
     dir = nextDir;
     var head = snake[0];
     var newHead = { x: head.x + dir.x, y: head.y + dir.y };
@@ -218,13 +235,27 @@
       score++;
       $('scorenum').textContent = String(score);
       tickInterval = Math.max(TICK_MIN, tickInterval - TICK_STEP);
+      spawnParticles(10, food.x * CELL_PX + CELL_PX / 2, food.y * CELL_PX + CELL_PX / 2, '255,107,107');
       placeFood();
     } else {
       snake.pop();
     }
   }
 
+  function updateParticles(dt) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      var p = particles[i];
+      p.life += dt;
+      if (p.life >= p.maxLife) { particles.splice(i, 1); continue; }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vx *= Math.pow(0.06, dt);
+      p.vy *= Math.pow(0.06, dt);
+    }
+  }
+
   function update(dt) {
+    updateParticles(dt);
     if (!running || over) return;
     tickTimer += dt;
     while (tickTimer >= tickInterval) {
@@ -236,7 +267,18 @@
 
   // ================================================================ render
 
+  function segPx(i, t) {
+    var cur = snake[i];
+    var prev = prevSnake[Math.min(i, prevSnake.length - 1)] || cur;
+    return {
+      x: (prev.x + (cur.x - prev.x) * t) * CELL_PX + CELL_PX / 2,
+      y: (prev.y + (cur.y - prev.y) * t) * CELL_PX + CELL_PX / 2
+    };
+  }
+
   function render() {
+    var now = performance.now();
+
     ctx.fillStyle = '#0c0e12';
     ctx.fillRect(0, 0, BOARD_PX, BOARD_PX);
 
@@ -247,19 +289,76 @@
       }
     }
 
-    ctx.fillStyle = '#ff6b6b';
-    var fp = CELL_PX * 0.32;
+    // food: pulsing apple with a soft halo and a leaf
+    var fx = food.x * CELL_PX + CELL_PX / 2, fy = food.y * CELL_PX + CELL_PX / 2;
+    var pulse = 1 + Math.sin(now / 260) * 0.1;
+    var fr = CELL_PX * 0.34 * pulse;
+
+    var halo = ctx.createRadialGradient(fx, fy, 0, fx, fy, fr * 2.4);
+    halo.addColorStop(0, 'rgba(255,107,107,.28)');
+    halo.addColorStop(1, 'rgba(255,107,107,0)');
+    ctx.fillStyle = halo;
     ctx.beginPath();
-    ctx.arc(food.x * CELL_PX + CELL_PX / 2, food.y * CELL_PX + CELL_PX / 2, fp, 0, Math.PI * 2);
+    ctx.arc(fx, fy, fr * 2.4, 0, Math.PI * 2);
     ctx.fill();
 
-    for (var i = snake.length - 1; i >= 0; i--) {
-      var s = snake[i];
-      var t = i / Math.max(1, snake.length - 1);
-      var lightness = 62 - t * 20;
-      ctx.fillStyle = 'hsl(102, 55%, ' + lightness + '%)';
-      var pad = i === 0 ? 1 : 2;
-      ctx.fillRect(s.x * CELL_PX + pad, s.y * CELL_PX + pad, CELL_PX - pad * 2, CELL_PX - pad * 2);
+    var appleGrad = ctx.createRadialGradient(fx - fr * 0.35, fy - fr * 0.35, fr * 0.15, fx, fy, fr);
+    appleGrad.addColorStop(0, '#ff9b9b');
+    appleGrad.addColorStop(0.55, '#ff6b6b');
+    appleGrad.addColorStop(1, '#d43f3f');
+    ctx.fillStyle = appleGrad;
+    ctx.beginPath();
+    ctx.arc(fx, fy, fr, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = '#6fbf5a';
+    ctx.beginPath();
+    ctx.ellipse(fx + fr * 0.15, fy - fr * 0.95, fr * 0.42, fr * 0.2, -0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // snake body: a rounded, tapered stroke through interpolated segment
+    // centers instead of raw per-cell squares
+    var t = Math.min(1, tickTimer / tickInterval);
+    var n = snake.length;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    for (var i = n - 1; i >= 1; i--) {
+      var a = segPx(i, t), b = segPx(i - 1, t);
+      var depth = i / Math.max(1, n - 1);
+      var lightness = 58 - depth * 22;
+      ctx.strokeStyle = 'hsl(102, 55%, ' + lightness + '%)';
+      ctx.lineWidth = CELL_PX * (0.82 - depth * 0.22);
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+    }
+
+    // head with eyes facing the current heading
+    var head = segPx(0, t);
+    ctx.fillStyle = 'hsl(102, 58%, 60%)';
+    ctx.beginPath();
+    ctx.arc(head.x, head.y, CELL_PX * 0.44, 0, Math.PI * 2);
+    ctx.fill();
+
+    var ex = dir.x * CELL_PX * 0.16, ey = dir.y * CELL_PX * 0.16;
+    var perpX = -dir.y * CELL_PX * 0.16, perpY = dir.x * CELL_PX * 0.16;
+    [-1, 1].forEach(function (side) {
+      var cx = head.x + ex + perpX * side, cy = head.y + ey + perpY * side;
+      ctx.fillStyle = '#0c0e12';
+      ctx.beginPath();
+      ctx.arc(cx + dir.x * CELL_PX * 0.08, cy + dir.y * CELL_PX * 0.08, CELL_PX * 0.09, 0, Math.PI * 2);
+      ctx.fill();
+    });
+
+    // particle burst on eat
+    for (var p = 0; p < particles.length; p++) {
+      var pt = particles[p];
+      var alpha = Math.max(0, 1 - pt.life / pt.maxLife);
+      ctx.fillStyle = 'rgba(' + pt.color + ',' + alpha + ')';
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, pt.r, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 

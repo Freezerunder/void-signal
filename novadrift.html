@@ -283,6 +283,8 @@
 
   var position = 0;     // world z along the track
   var speed = 0;
+  var speedPercentG = 0;
+  var offroadG = false;
   var playerX = 0;       // -1..1 across the road, can exceed onto grass
   var playerVX = 0;      // lateral velocity driving playerX
   var running = false;
@@ -425,6 +427,8 @@
     if (offroad && speed > OFFROAD_LIMIT) speed += OFFROAD_DECEL * dt;
 
     speed = Math.max(0, Math.min(MAX_SPEED, speed));
+    speedPercentG = speed / MAX_SPEED;
+    offroadG = offroad;
 
     // Outer wall: an actual bounce off the impact instead of a sticky
     // clamp — lose speed in proportion to how hard you hit it and get
@@ -546,6 +550,41 @@
     ctx.fill();
   }
 
+  function drawRoadside(segment, s1) {
+    if (segment.index % 4 !== 0) return;
+    var h = s1.w * 0.9;
+    if (h < 3 || s1.y > HEIGHT + 40) return;
+    var side = Math.floor(segment.index / 4) % 2 === 0 ? 1 : -1;
+    var baseX = s1.x + side * (s1.w * 1.32);
+    var baseY = s1.y;
+    var kind = Math.floor(segment.index / 4) % 3;
+
+    if (kind === 2) {
+      // striped marker post
+      ctx.fillStyle = '#eef1f6';
+      ctx.fillRect(baseX - h * 0.05, baseY - h * 0.55, h * 0.1, h * 0.55);
+      ctx.fillStyle = '#e8973f';
+      ctx.fillRect(baseX - h * 0.05, baseY - h * 0.55, h * 0.1, h * 0.16);
+      return;
+    }
+
+    ctx.fillStyle = '#241a12';
+    ctx.fillRect(baseX - h * 0.045, baseY - h * 0.24, h * 0.09, h * 0.24);
+    ctx.fillStyle = kind === 0 ? '#1f5c3d' : '#276b45';
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY - h);
+    ctx.lineTo(baseX - h * 0.34, baseY - h * 0.42);
+    ctx.lineTo(baseX + h * 0.34, baseY - h * 0.42);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(baseX, baseY - h * 0.7);
+    ctx.lineTo(baseX - h * 0.26, baseY - h * 0.22);
+    ctx.lineTo(baseX + h * 0.26, baseY - h * 0.22);
+    ctx.closePath();
+    ctx.fill();
+  }
+
   function drawWheel(x, yTop, yBot, wWheel) {
     ctx.fillStyle = '#111318';
     ctx.fillRect(x - wWheel / 2, yTop, wWheel, yBot - yTop);
@@ -645,6 +684,14 @@
     var basePercent = percentRemaining(position, SEGMENT_LENGTH);
     var maxy = HEIGHT;
 
+    ctx.save();
+    if (running) {
+      var shakeAmt = speedPercentG * speedPercentG * (offroadG ? 5 : 1.6);
+      if (shakeAmt > 0.05) {
+        ctx.translate((Math.random() - 0.5) * shakeAmt, (Math.random() - 0.5) * shakeAmt);
+      }
+    }
+
     drawBackground();
 
     var x = 0, dx = -(baseSegment.curve * basePercent);
@@ -666,10 +713,12 @@
       if (camZ1 <= 1 || s2.y >= s1.y || s2.y >= maxy) continue;
 
       renderSegment(s1.x, s1.y, s1.w, s2.x, s2.y, s2.w, segment.color);
+      drawRoadside(segment, s1);
       maxy = s1.y;
     }
 
     drawCar();
+    ctx.restore();
   }
 
   // ================================================================== loop

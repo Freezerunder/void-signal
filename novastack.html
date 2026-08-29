@@ -181,7 +181,7 @@
 
   // ================================================================== state
 
-  var stack, moving, debris, camera, cameraTarget, score, best, running, over, perfectStreak;
+  var stack, moving, debris, camera, cameraTarget, score, best, running, over, perfectStreak, perfectPulse;
   var RECOVERY_STREAK = 3;
   var RECOVERY_GROWTH = 26;
 
@@ -217,6 +217,7 @@
     score = 0;
     over = false;
     perfectStreak = 0;
+    perfectPulse = null;
     $('scorenum').textContent = '0';
   }
 
@@ -255,6 +256,10 @@
       d.rot += d.vrot * dt;
       d.age += dt;
       if (d.age > 1.4) debris.splice(i, 1);
+    }
+    if (perfectPulse) {
+      perfectPulse.age += dt;
+      if (perfectPulse.age > perfectPulse.duration) perfectPulse = null;
     }
   }
 
@@ -317,6 +322,7 @@
     $('scorenum').textContent = String(score);
 
     if (perfect) {
+      perfectPulse = { x: layer.x, z: layer.z, y: stack.length * LAYER_H, age: 0, duration: 0.5 };
       perfectStreak++;
       if (perfectStreak >= RECOVERY_STREAK) {
         // A run of perfects earns a little width back — a small recovery
@@ -388,6 +394,13 @@
     // top
     var top = [p(xN, zN, y1), p(xP, zN, y1), p(xP, zP, y1), p(xN, zP, y1)];
     poly(top, color.top);
+    if (ctx.globalAlpha > 0.4) {
+      var specular = ctx.createLinearGradient(top[0][0], top[0][1], top[2][0], top[2][1]);
+      specular.addColorStop(0, 'rgba(255,255,255,.28)');
+      specular.addColorStop(0.45, 'rgba(255,255,255,0)');
+      specular.addColorStop(1, 'rgba(255,255,255,0)');
+      poly(top, specular);
+    }
 
     // right face (x = xP)
     var right = [p(xP, zN, y1), p(xP, zP, y1), p(xP, zP, y0), p(xP, zN, y0)];
@@ -419,11 +432,44 @@
     ctx.fillRect(0, 0, WIDTH, HEIGHT);
   }
 
+  function drawGroundShadow(originX, originY) {
+    var p = project(0, 0, 0);
+    ctx.save();
+    ctx.translate(p.x + originX, p.y + originY);
+    ctx.scale(1, ISO_Y / ISO_X);
+    var grd = ctx.createRadialGradient(0, 0, 0, 0, 0, BASE_SIZE * 0.66);
+    grd.addColorStop(0, 'rgba(0,0,0,.4)');
+    grd.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = grd;
+    ctx.beginPath();
+    ctx.arc(0, 0, BASE_SIZE * 0.66, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawPerfectPulse(originX, originY) {
+    if (!perfectPulse) return;
+    var p = project(perfectPulse.x, perfectPulse.z, perfectPulse.y);
+    var t = perfectPulse.age / perfectPulse.duration;
+    var r = 14 + t * 60;
+    ctx.save();
+    ctx.translate(p.x + originX, p.y + originY);
+    ctx.scale(1, ISO_Y / ISO_X);
+    ctx.strokeStyle = 'rgba(255,255,255,' + (0.55 * (1 - t)) + ')';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(0, 0, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+
   function render() {
     drawBackground();
 
     var originX = WIDTH / 2;
     var originY = HEIGHT * 0.62 + camera;
+
+    drawGroundShadow(originX, originY);
 
     var n, layer;
     for (n = 0; n < stack.length; n++) {
@@ -431,6 +477,8 @@
       var y0 = n * LAYER_H, y1 = y0 + LAYER_H;
       drawCuboid(layer.x, layer.z, layer.w, layer.d, y0, y1, layer.color, 1, originX, originY);
     }
+
+    drawPerfectPulse(originX, originY);
 
     if (running && !over) {
       var y0m = stack.length * LAYER_H, y1m = y0m + LAYER_H;
